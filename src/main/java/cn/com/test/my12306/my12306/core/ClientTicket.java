@@ -507,6 +507,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 }
             }).start();*/
 
+            ct.queryInit(headers);//设置查询地址 queryA queryZ
             ScheduledExecutorService es = Executors.newScheduledThreadPool(commonUtil.queryNum);
             ct.xianchengshuapiao(es);
 
@@ -894,6 +895,16 @@ public class ClientTicket /*implements ApplicationRunner*/{
             String queryUrl ="";
             String responseBody = "";
             try{
+                if(headers.length<7){
+                    headers = new BasicHeader[7];
+                    headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+                    headers[1] = new BasicHeader("Host","kyfw.12306.cn");
+                    headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/login/init");
+                    headers[3] = new BasicHeader("Accept","*/*");
+                    headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
+                    headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
+                    headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded");
+                }
                 headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
                 HttpUriRequest confirm = RequestBuilder.post()
                         .setUri(new URI("https://kyfw.12306.cn/otn/leftTicket/init"))
