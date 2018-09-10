@@ -62,25 +62,25 @@ public class TicketQuery implements  Runnable{
     @Override
     public void run(){
 
+        //超时设置
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(3000).setConnectionRequestTimeout(3000)
+                .setSocketTimeout(3000).build();
 
+
+
+        Map<String,Integer> trainSeatMap = ct.getTrainSeatMap();
+        Map<String,Long> trainSeatTimeMap = ct.getTrainSeatTimeMap();
 
         while(true){
             CloseableHttpClient httpClient=null;
             try{
             httpClient = TicketHttpClient.getClient();
-            //超时设置
-                RequestConfig requestConfig = RequestConfig.custom()
-                        .setConnectTimeout(3000).setConnectionRequestTimeout(3000)
-                        .setSocketTimeout(3000).build();
 
+            String queryIp = commonUtil.getIp();
 
-
-                Map<String,Integer> trainSeatMap = ct.getTrainSeatMap();
-                Map<String,Long> trainSeatTimeMap = ct.getTrainSeatTimeMap();
-
-
-            String urlStr = "http://"+commonUtil.getIp()+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+commonUtil.getDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
-            System.out.println("ip:"+commonUtil.getIp());
+            String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+commonUtil.getDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
+            System.out.println("ip:"+queryIp);
             HttpGet httpget = new HttpGet(urlStr);
             httpget.setHeader("Host", "kyfw.12306.cn");//设置host
                 httpget.setConfig(requestConfig);
@@ -136,7 +136,7 @@ public class TicketQuery implements  Runnable{
                            System.out.println();
                            queue.put(mapQueue);*/
                        }
-
+                       System.out.println(queryIp + "查询成功");
                     }
                 }
             }catch (ConnectTimeoutException e1){
