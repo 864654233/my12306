@@ -27,6 +27,7 @@
 package cn.com.test.my12306.my12306.core;
 
 import cn.com.test.my12306.my12306.core.util.FileUtil;
+import cn.com.test.my12306.my12306.core.util.ImageUtil;
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
 import cn.com.test.my12306.my12306.core.util.mail.MailUtils;
 import org.apache.http.Header;
@@ -48,8 +49,7 @@ import org.springframework.stereotype.Service;
 import javax.swing.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.URI;
 import java.util.Date;
 import java.util.HashMap;
@@ -82,6 +82,8 @@ public class ClientTicket /*implements ApplicationRunner*/{
 //    private String hosts="121.18.230.86";
     private Map<String,Integer> trainSeatMap = new ConcurrentHashMap<String,Integer>();
     private Map<String,Long> trainSeatTimeMap = new ConcurrentHashMap<String,Long>();
+
+
     private String hosts="kyfw.12306.cn";
     private String leftTicketUrl = "leftTicket/query";
 
@@ -90,11 +92,13 @@ public class ClientTicket /*implements ApplicationRunner*/{
     public ClientTicket(BasicCookieStore cookieStore, CloseableHttpClient httpclient) {
         this.cookieStore = cookieStore;
         this.httpclient = httpclient;
+        this.hosts = commonUtil.getIp();
         rancode = "";
     }
 
     public ClientTicket(BasicCookieStore cookieStore) {
         this.cookieStore = cookieStore;
+        this.hosts = commonUtil.getIp();
         rancode = "";
     }
 
@@ -403,20 +407,27 @@ public class ClientTicket /*implements ApplicationRunner*/{
         //JFrame frame = new JFrame("验证码");
         this.rancode="";
         System.out.println("获取验证码的地址："+url);
+        String codeName = System.currentTimeMillis()+".jpg";
+        if(CommonUtil.autoCode.equals("1")){
+            getCodeByte(url, headers,codeName);
+            String rs=ImageUtil.shibie(CommonUtil.sessionPath+File.separator+CommonUtil.codePath,codeName);
+            String rsCode = ImageUtil.getZuobiao(rs);
+            this.rancode=rsCode;
+        }else {
 //        new TipTest("","","请输入验证码");
-        JLabel label = new JLabel(new ImageIcon(getCodeByte(url,headers)),
-                JLabel.CENTER);
+            JLabel label = new JLabel(new ImageIcon(getCodeByte(url, headers,codeName)),
+                    JLabel.CENTER);
 
-        label.setBounds(0, 0, 295, 220);
-        label.setVerticalAlignment(SwingConstants.TOP);
-        label.addMouseListener(new RecordListener());
+            label.setBounds(0, 0, 295, 220);
+            label.setVerticalAlignment(SwingConstants.TOP);
+            label.addMouseListener(new RecordListener());
 
-        JOptionPane.showConfirmDialog(null, label,
-                "请输入验证码", JOptionPane.DEFAULT_OPTION);
-		/*InputStreamReader isr = new InputStreamReader(System.in);
-		BufferedReader br = new BufferedReader(isr);
-		String rd = br.readLine();*/
-        //frame.dispose();
+            JOptionPane.showConfirmDialog(null, label,
+                    "请输入验证码", JOptionPane.DEFAULT_OPTION);
+
+        }
+//        String fileName = System.currentTimeMillis()+".jpg";
+//        ImageUtil.download("https://aa/passport/captcha/captcha-image?login_site=E&module=login&rand=sjrand&"+Math.random(),fileName,"");
         return this.rancode;
     }
 
@@ -427,9 +438,11 @@ public class ClientTicket /*implements ApplicationRunner*/{
      * @return
      */
 
-    public byte[] getCodeByte(String url,Header[] headers) {
+    public byte[] getCodeByte(String url,Header[] headers,String codeName) {
         HttpGet get = new HttpGet(url);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        InputStream in=null;
+        OutputStream out = null;
         byte[] bytse = null;
             try {
                 HttpGet hget = new HttpGet("https://"+hosts+"/passport/captcha/captcha-image?login_site=E&module=login&rand=sjrand&" + Math.random());
@@ -440,7 +453,20 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 CloseableHttpResponse response = httpclient.execute(hget);
 
                 HttpEntity entity = response.getEntity();
-              bytse=  EntityUtils.toByteArray(entity);
+                bytse=  EntityUtils.toByteArray(entity);
+                //保存图片到本地
+                in = entity.getContent();
+                File sf=new File(CommonUtil.sessionPath+File.separator+CommonUtil.codePath);
+                if(!sf.exists()){
+                    sf.mkdirs();
+                }
+                out = new FileOutputStream(new File(CommonUtil.sessionPath+File.separator+CommonUtil.codePath+File.separatorChar+codeName));
+
+                out.write(bytse,0,bytse.length);
+                out.flush();
+                in.close();
+
+
                 EntityUtils.consume(entity); //Consume response content
             }catch(Exception e ){
                e.printStackTrace();
@@ -488,6 +514,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
             //登陆
             boolean loginFlag=true;
+//            ct.setHosts();
 //            while( ct.login(headers)){
             while( loginFlag){
                 loginFlag= !ct.login(headers);
@@ -613,7 +640,10 @@ public class ClientTicket /*implements ApplicationRunner*/{
             while(!checkedCode) {
 
                 //获取验证码
-                String valicode = this.getCode("", headers);
+                String valicode = "";
+                while(valicode.equals("")){
+                    valicode = this.getCode("", headers);
+                }
 
                 System.out.println("验证码：" + valicode);
 
@@ -634,7 +664,9 @@ public class ClientTicket /*implements ApplicationRunner*/{
                     HttpEntity entity = response.getEntity();
                     rsmap = this.jsonBinder.fromJson(EntityUtils.toString(entity), Map.class);
 //                System.out.println("校验：" + response.getStatusLine().getStatusCode() + " " + entity.getContent() + " abc " + EntityUtils.toString(entity));
-                    if (rsmap.get("result_code").equalsIgnoreCase("4")) {
+                    if(null==rsmap){
+                        System.out.println("验证码校验没有通过111");
+                    }else  if (rsmap.get("result_code").equalsIgnoreCase("4")) {
                         System.out.println("验证码校验通过");
                         checkedCode=true;
                     } else {
