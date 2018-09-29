@@ -180,7 +180,7 @@ public class ImageUtil {
 					.addParameter("imgData", base64)
 					.build();*/
 			HttpUriRequest checkCode = RequestBuilder.post()
-					.setUri(new URI("http://123.57.138.40:8000/12306/code"))
+					.setUri(new URI("http://123.57.138.40:9443/12306/code"))
 					.addParameter("user", "111")
 					.addParameter("key", "123456")
 //					.addParameter("file", base64)
@@ -211,7 +211,7 @@ public class ImageUtil {
 		String rs ="";
 		try {
 			CloseableHttpClient httpClient = HttpClients.createDefault();
-			HttpPost uploadFile = new HttpPost("http://123.57.138.40:8000/12306/code");
+			HttpPost uploadFile = new HttpPost("http://123.57.138.40:9443/12306/code");
 			MultipartEntityBuilder builder = MultipartEntityBuilder.create();
 //			builder.addTextBody("field1", "yes", ContentType.TEXT_PLAIN);
 			ContentType contentType = ContentType.create(HTTP.PLAIN_TEXT_TYPE, HTTP.UTF_8);
@@ -277,7 +277,7 @@ public class ImageUtil {
 		String rs ="";
 		try {
 			CloseableHttpClient httpClient = HttpClients.createDefault();
-			HttpPost uploadFile = new HttpPost("http://123.57.138.40:8000/12306/code");
+			HttpPost uploadFile = new HttpPost("http://123.57.138.40:9443/12306/code");
 			MultipartEntityBuilder builder = MultipartEntityBuilder.create();
 //			builder.addTextBody("field1", "yes", ContentType.TEXT_PLAIN);
 			ContentType contentType = ContentType.create(HTTP.PLAIN_TEXT_TYPE, HTTP.UTF_8);
