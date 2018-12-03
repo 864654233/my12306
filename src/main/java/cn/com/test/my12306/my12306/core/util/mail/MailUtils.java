@@ -12,17 +12,17 @@ import org.springframework.stereotype.Component;
 public class MailUtils {
 	private static Logger logger = LogManager.getLogger(MailUtils.class);
 
-	public static String emailHost = "mail.leador.com.cn";// 邮件地址
+	public static String emailHost = "mail.139.com";// 邮件地址
 
 	public static String emailName = "订票";// 邮件名
 
-	public static String emailUsername = "ijietu";// 邮件用户
+	public static String emailUsername = "用户名";// 邮件用户
 
-	public static String emailPassword = "leador!@#$%^";// 邮件密码
+	public static String emailPassword = "邮件密码";// 邮件密码
 
-	public static String emailSender = "ijietu@leador.com.cn";// 发送者
+	public static String emailSender = "864654233@qq.com";// 发送者
 
-	public static String emailReceiver = "578333643@qq.com";// 发送者
+	public static String emailReceiver = "864654233@qq.com";// 接收者
 
 	@Value("${emailHost}")
 	public void setEmailHost(String emailHost) {
