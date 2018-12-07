@@ -41,10 +41,8 @@ import org.apache.http.impl.cookie.BasicClientCookie;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import javax.swing.*;
 import java.awt.event.MouseAdapter;
@@ -408,14 +406,22 @@ public class ClientTicket /*implements ApplicationRunner*/{
         this.rancode="";
         System.out.println("获取验证码的地址："+url);
         String codeName = System.currentTimeMillis()+".jpg";
+        String imagePath = "";
+        String imageBase64="";
+        while(StringUtils.isEmpty(imagePath)){
+            Map<String,String> rsMap = getCodeByte(url, headers,codeName);
+            imagePath = rsMap.get("imagePath");
+            imageBase64 = rsMap.get("imageBase64");
+        }
         if(CommonUtil.autoCode.equals("1")){
-            getCodeByte(url, headers,codeName);
-            String rs=ImageUtil.shibie(CommonUtil.sessionPath+File.separator+CommonUtil.codePath,codeName);
-            String rsCode = ImageUtil.getZuobiao(rs);
-            this.rancode=rsCode;
+            String rs=ImageUtil.shibie360(imageBase64);
+//            String rsCode = ImageUtil.getZuobiao(rs);
+            this.rancode=rs;
         }else {
 //        new TipTest("","","请输入验证码");
-            JLabel label = new JLabel(new ImageIcon(getCodeByte(url, headers,codeName)),
+//            JLabel label = new JLabel(new ImageIcon(getCodeByte(url, headers,codeName)),
+//                    JLabel.CENTER);
+            JLabel label = new JLabel(new ImageIcon(imagePath),
                     JLabel.CENTER);
 
             label.setBounds(0, 0, 295, 220);
@@ -438,14 +444,16 @@ public class ClientTicket /*implements ApplicationRunner*/{
      * @return
      */
 
-    public byte[] getCodeByte(String url,Header[] headers,String codeName) {
+    public  Map<String,String> getCodeByte(String url,Header[] headers,String codeName) {
         HttpGet get = new HttpGet(url);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         InputStream in=null;
         OutputStream out = null;
         byte[] bytse = null;
+        Map<String,String> rsMap = new HashMap<String,String>();
+        String fileName="";
             try {
-                HttpGet hget = new HttpGet("https://"+hosts+"/passport/captcha/captcha-image?login_site=E&module=login&rand=sjrand&" + Math.random());
+                HttpGet hget = new HttpGet("https://"+hosts+"/passport/captcha/captcha-image64?login_site=E&module=login&rand=sjrand&" + Math.random());
                for(Header h:headers){
                    hget.addHeader(h);
                }
@@ -453,7 +461,26 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 CloseableHttpResponse response = httpclient.execute(hget);
 
                 HttpEntity entity = response.getEntity();
-                bytse=  EntityUtils.toByteArray(entity);
+                String content = EntityUtils.toString(entity, "UTF-8");
+                Map<String, Object> rsmap = null;
+                rsmap = this.jsonBinder.fromJson(content, Map.class);
+                String code = rsmap.get("result_code")+"";
+                String image =  rsmap.get("image")+"";
+                if(null!=image){
+                    String savePath=CommonUtil.sessionPath+CommonUtil.codePath;
+                    File sf=new File(savePath);
+                    if(!sf.exists()){
+                        sf.mkdirs();
+                    }
+                    ImageUtil.GenerateImage(image,savePath+File.separator+codeName);
+                    fileName = savePath+File.separator+codeName;
+                    rsMap.put("imagePath",fileName);
+                    rsMap.put("imageBase64",image);
+                }else{
+                    fileName="";
+                }
+
+               /* bytse=  EntityUtils.toByteArray(entity);
                 //保存图片到本地
                 in = entity.getContent();
                 File sf=new File(CommonUtil.sessionPath+File.separator+CommonUtil.codePath);
@@ -467,11 +494,11 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 in.close();
 
 
-                EntityUtils.consume(entity); //Consume response content
+                EntityUtils.consume(entity); //Consume response content*/
             }catch(Exception e ){
                e.printStackTrace();
             }
-            return bytse;
+            return rsMap;
 
     }
 
