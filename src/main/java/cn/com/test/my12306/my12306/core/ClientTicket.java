@@ -145,6 +145,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
         ClientTicket ct = new ClientTicket();
         CloseableHttpClient httpclient = ct.getHttpclient();
+        CommonUtil commonUtil = new CommonUtil();
         Header[] headers = new BasicHeader[3];
         headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
         headers[1] = new BasicHeader("Host","kyfw.12306.cn");
@@ -194,7 +195,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             }).start();*/
            //设置查询url
             ct.queryInit(headers);
-
+            Thread.sleep(200);
             ScheduledExecutorService es = Executors.newScheduledThreadPool(CommonUtil.queryNum);
             ct.xianchengshuapiao(es);
 
@@ -258,6 +259,10 @@ public class ClientTicket /*implements ApplicationRunner*/{
             if(c.endsWith(";")) c=c.substring(0,c.length()-1);
         FileUtil.saveAs(c,commonUtil.sessionPath+commonUtil.getUserName()+"_12306Session.txt");
         System.out.println("结束获取cookie");
+    }
+
+    public  void resetCookiesFile(){
+        FileUtil.saveAs("",commonUtil.sessionPath+commonUtil.getUserName()+"_12306Session.txt");
     }
 
     /**
@@ -562,6 +567,13 @@ public class ClientTicket /*implements ApplicationRunner*/{
             }).start();*/
 
             ct.queryInit(headers);//设置查询地址 queryA queryZ
+            ct.getAllCookies(ct.cookieStore);
+//            ct.getCodeByte(headers);
+            BasicClientCookie acookie = new BasicClientCookie("current_captcha_type", "Z");
+            acookie.setDomain("kyfw.12306.cn");
+            acookie.setPath("/");
+            cookieStore.addCookie(acookie);
+            ct.getAllCookies(ct.cookieStore);
             ScheduledExecutorService es = Executors.newScheduledThreadPool(commonUtil.queryNum);
             ct.xianchengshuapiao(es);
 
@@ -632,6 +644,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     public boolean login(Header[] headers){
         try {
+            headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
             HttpUriRequest initPage1 = RequestBuilder.get()//.post()
                     .setUri(new URI("https://"+this.hosts+"/otn/login/init"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
@@ -985,6 +998,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
                         setLeftTicketUrl(queryUrl);
                         System.out.println("查询的地址是："+queryUrl);
                     }
+                    headers[2]= new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
                 }else{
                     System.out.println("查询页面初始化失败 status错误");
                 }
@@ -1001,6 +1015,31 @@ public class ClientTicket /*implements ApplicationRunner*/{
             }
             return queryUrl;
 
+    }
+
+   /* public void getCodeByte(Header[] headers) {
+        byte[] bytse = null;
+        try {
+            HttpGet hget = new HttpGet("https://kyfw.12306.cn/otn/passcodeNew/getPassCodeNew?module=passenger&rand=randp&" + Math.random());
+            for(Header h:headers){
+                hget.addHeader(h);
+            }
+            CloseableHttpResponse response = httpclient.execute(hget);
+
+            HttpEntity entity = response.getEntity();
+            bytse=  EntityUtils.toByteArray(entity);
+            EntityUtils.consume(entity); //Consume response content
+        }catch(Exception e ){
+            e.printStackTrace();
+        }
+
+    }*/
+
+    public void resetCookieStore(){
+        cookieStore = new BasicCookieStore();
+        httpclient = HttpClients.custom()
+                .setDefaultCookieStore(cookieStore)
+                .build();
     }
 
 }
