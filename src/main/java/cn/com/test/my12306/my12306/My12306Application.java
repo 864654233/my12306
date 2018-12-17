@@ -5,8 +5,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+import java.util.concurrent.CountDownLatch;
 
 @SpringBootApplication
+@EnableScheduling
 public class My12306Application implements CommandLineRunner {
 
 	@Autowired
@@ -21,8 +25,9 @@ public class My12306Application implements CommandLineRunner {
 	@Override
 	public void run(String... args) throws Exception {
 //		Thread.sleep(5000);
+        CountDownLatch latch = new CountDownLatch(1);
 		System.out.println("开始执行");
-//		ClientTicket ct = new ClientTicket();
 		ct.run();
+        latch.await();
 	}
 }

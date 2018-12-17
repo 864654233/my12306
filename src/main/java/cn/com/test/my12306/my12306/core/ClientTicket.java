@@ -26,13 +26,17 @@
  */
 package cn.com.test.my12306.my12306.core;
 
+import cn.com.test.my12306.my12306.core.util.DateUtil;
 import cn.com.test.my12306.my12306.core.util.FileUtil;
 import cn.com.test.my12306.my12306.core.util.ImageUtil;
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
 import cn.com.test.my12306.my12306.core.util.mail.MailUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.*;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.methods.RequestBuilder;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -40,6 +44,8 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.cookie.BasicClientCookie;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -47,13 +53,22 @@ import org.springframework.util.StringUtils;
 import javax.swing.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -68,9 +83,10 @@ public class ClientTicket /*implements ApplicationRunner*/{
     @Autowired
     ClientTicket ct;
 
+
     @Autowired
     MailUtils mailUtils ;
-    //    Logger log = Logger.getLogger(ClientTicket.class);
+    private static Logger logger = LogManager.getLogger(ClientTicket.class);
     private String rancode = "";
     BasicCookieStore cookieStore = null;
     CloseableHttpClient httpclient = null;
@@ -84,8 +100,11 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     private String hosts="kyfw.12306.cn";
     private String leftTicketUrl = "leftTicket/query";
+    ScheduledExecutorService es = null;
+    //是否可以运行查票
+    boolean canRun;
 
-    private BlockingQueue<Map<String,String>> queue = new LinkedBlockingQueue<Map<String, String>>(10);
+    public BlockingQueue<Map<String,String>> queue = new LinkedBlockingQueue<Map<String, String>>(10);
 
     public ClientTicket(BasicCookieStore cookieStore, CloseableHttpClient httpclient) {
         this.cookieStore = cookieStore;
@@ -139,88 +158,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     public void setLeftTicketUrl(String leftTicketUrl) {
         this.leftTicketUrl = leftTicketUrl;
-    }
-
-    public static void main(String[] args) throws Exception {
-
-        ClientTicket ct = new ClientTicket();
-        CloseableHttpClient httpclient = ct.getHttpclient();
-        CommonUtil commonUtil = new CommonUtil();
-        Header[] headers = new BasicHeader[3];
-        headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
-        headers[1] = new BasicHeader("Host","kyfw.12306.cn");
-        headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
-
-       /* BasicCookieStore cookieStore = new BasicCookieStore();
-        CloseableHttpClient httpclient = HttpClients.custom()
-                .setDefaultCookieStore(cookieStore)
-                .build();*/
-        try {
-            //初始化页面
-
-          /*  HttpUriRequest initPage = RequestBuilder.get()//.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/index/init"))
-                    .addHeader(headers[0]).addHeader(headers[1])
-//                    .addParameter("password", "034a58c0a3ed140f656df15303624b13e09085049ad3aea410bc713e5453251d72351fca9c550dfecbdb55b8fbbe00612c1c03ba3254617378fcd6ac7d7c88b357ad3a8c2b26c5658ff118b28f82bcf5cf199d52832596f26ce92a4c1585af5e8ab11d9ad785181aa9d366c38c5899c4cdabf46b63fea19abc1379123057b094")
-//                    .addParameter("username", "dsadmin").addParameter("logintype", "3")
-                    .build();
-            CloseableHttpResponse response2 = httpclient.execute(initPage);
-            try {
-                HttpEntity entity = response2.getEntity();
-                getAllHeaders(response2);
-
-                System.out.println("Login form get: " + response2.getStatusLine());
-                EntityUtils.consume(entity);
-
-                ct.getAllCookies(ct.cookieStore);
-
-            } finally {
-                response2.close();
-            }*/
-
-
-            //登陆
-            while( ct.login(headers)){
-                break;
-            }
-            //设置刷票地址
-
-            //刷票
-           // ct.shuapiao(headers,"","");
-           /* new  Thread(new Runnable(){
-                public void run(){
-                    System.out.println("主线程刷票");
-                    ct.shuapiao(headers);
-                }
-            }).start();*/
-           //设置查询url
-            ct.queryInit(headers);
-            Thread.sleep(200);
-            ScheduledExecutorService es = Executors.newScheduledThreadPool(CommonUtil.queryNum);
-            ct.xianchengshuapiao(es);
-
-            while(ct.queue.size()==0){
-                Thread.sleep(200);
-            }
-            System.out.println("有票了 开始预订");
-            es.shutdownNow();
-
-            //不需要停止
-            //es.shutdown();
-
-            //订票线程？主程序订票
-            new Thread(new TicketBook(ct,ct.queue,ct.getHttpclient(),headers)).start();
-
-            while(true){
-                Thread.sleep(1000);
-            }
-
-        }catch (Exception e){
-            e.printStackTrace();
-        }finally {
-            httpclient.close();
-        }
-
     }
 
     public static void getAllHeaders(CloseableHttpResponse response){
@@ -282,9 +219,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
             }
         }
-        System.out.println("读取cookie成功 开始查询");
-        getAllCookies(cookieStore);
-        System.out.println("读取cookie成功 查询完毕");
 
     }
 
@@ -356,16 +290,21 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     /**
      * 多线程刷票
-     * @param es
+     * @param es1
      */
-    public void xianchengshuapiao(ScheduledExecutorService es){
+    public void xianchengshuapiao(ScheduledExecutorService es1){
         for (int i = 0; i < 8; i++) {
 //        while(true){
             // 刷票线程
             System.out.println(i+"线程刷票");
 //                es.submit(new TicketQuery(ct.queue));
-            es.schedule(new TicketQuery(this.queue,this),300,TimeUnit.MILLISECONDS);
+            es.schedule(new TicketQuery(queue,ct),300,TimeUnit.MILLISECONDS);
         }
+    }
+
+    public void shutdownqueryThread(){
+        ct.canRun =false;
+        es.shutdownNow();
     }
 
     /**
@@ -374,7 +313,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
      */
     public void reshua( Header[] headers){
 
-        ScheduledExecutorService es = Executors.newScheduledThreadPool(commonUtil.queryNum);
         this.xianchengshuapiao(es);
 
         while(this.queue.size()==0){
@@ -387,7 +325,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
         System.out.println("有票了 开始预订");
         es.shutdownNow();
         //订票线程？主程序订票
-        new Thread(new TicketBook(this,this.queue,this.getHttpclient(),headers)).start();
+        new Thread(new TicketBook(ct,queue,httpclient,headers,cookieStore)).start();
 
     }
     public void shutdownqueryThread(ScheduledExecutorService es){
@@ -409,7 +347,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
     public String getCode(String url,Header[] headers) throws IOException {
         //JFrame frame = new JFrame("验证码");
         this.rancode="";
-        System.out.println("获取验证码的地址："+url);
         String codeName = System.currentTimeMillis()+".jpg";
         String imagePath = "";
         String imageBase64="";
@@ -509,6 +446,15 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
 //    public void run(ApplicationArguments var1) throws Exception {
     public void run() throws Exception {
+        es = Executors.newScheduledThreadPool(CommonUtil.queryNum);
+        canRun = false;
+        //是否是正常的预定时间
+        if(DateUtil.isNormalTime()){
+            canRun =true;
+        }else{
+            logger.info("维护时间，暂停查询");
+            return ;
+        }
 
 //        CloseableHttpClient httpclient = ct.getHttpclient();
         Header[] headers = new BasicHeader[3];
@@ -516,10 +462,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
         headers[1] = new BasicHeader("Host","kyfw.12306.cn");
         headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
 
-       /* BasicCookieStore cookieStore = new BasicCookieStore();
-        CloseableHttpClient httpclient = HttpClients.custom()
-                .setDefaultCookieStore(cookieStore)
-                .build();*/
         try {
             //初始化页面
 
@@ -551,7 +493,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             while( loginFlag){
                 loginFlag= !ct.login(headers);
                 if(!loginFlag){
-                    System.out.println("登陆成功，继续执行下面代码");
+                    logger.info("登陆成功，继续执行下面代码");
                     break;
                 }
 
@@ -574,20 +516,20 @@ public class ClientTicket /*implements ApplicationRunner*/{
             acookie.setPath("/");
             cookieStore.addCookie(acookie);
             ct.getAllCookies(ct.cookieStore);
-            ScheduledExecutorService es = Executors.newScheduledThreadPool(commonUtil.queryNum);
             ct.xianchengshuapiao(es);
-
-            while(ct.queue.size()==0){
+            //订票线程？主程序订票
+            new Thread(new TicketBook(ct,queue,ct.getHttpclient(),headers,cookieStore)).start();
+           /* while(ct.queue.size()==0){
                 Thread.sleep(200);
             }
             System.out.println("有票了 开始预订");
-            es.shutdownNow();
+            es.shutdownNow();*/
 
             //不需要停止
             //es.shutdown();
             //检查是否还在线
             //验证登陆状态
-            Map<String,Object> onlineMap = this.checkOnlineStatus(headers);
+           /* Map<String,Object> onlineMap = this.checkOnlineStatus(headers);
             if(null!=onlineMap && onlineMap.size()>0){
                 if("0".equalsIgnoreCase(onlineMap.get("result_code")+"")){
                     System.out.println("验证时候已经登陆");
@@ -604,19 +546,18 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
                     }
                 }
-            }
+            }*/
 
-            //订票线程？主程序订票
-            new Thread(new TicketBook(ct,ct.queue,ct.getHttpclient(),headers)).start();
 
-            while(true){
+
+          /*  while(true){
                 Thread.sleep(1000);
-            }
+            }*/
 
         }catch (Exception e){
             e.printStackTrace();
         }finally {
-            httpclient.close();
+//            httpclient.close();
         }
     }
 
@@ -644,6 +585,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     public boolean login(Header[] headers){
         try {
+            logger.info("init page");
             headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
             HttpUriRequest initPage1 = RequestBuilder.get()//.post()
                     .setUri(new URI("https://"+this.hosts+"/otn/login/init"))
@@ -660,18 +602,18 @@ public class ClientTicket /*implements ApplicationRunner*/{
             response3.close();
         }
             headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/login/init");
-
+            logger.info("page inited and start to readFile2Cookie ");
             //设置一遍cookie
             readFile2Cookie();
-
+            logger.info("check online status");
             //验证登陆状态
             Map<String,Object> onlineMap = this.checkOnlineStatus(headers);
             if(null!=onlineMap && onlineMap.size()>0){
                 if("0".equalsIgnoreCase(onlineMap.get("result_code")+"")){
-                    System.out.println("验证时候已经登陆");
+                    logger.info("验证时候已经登陆");
                     return true;
                 }else{
-                    System.out.println("验证时候未登录");
+                    logger.info("验证时候未登录");
                 }
             }
             //设置多余的cookie
@@ -687,7 +629,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
                 System.out.println("验证码：" + valicode);
 
-
+                logger.info("start check code");
                 //校验验证码
                 HttpUriRequest checkCode = RequestBuilder.post()
                         .setUri(new URI("https://" + this.hosts + "/passport/captcha/captcha-check"))
@@ -707,13 +649,13 @@ public class ClientTicket /*implements ApplicationRunner*/{
                     if(null==rsmap){
                         System.out.println("验证码校验没有通过111");
                     }else  if (rsmap.get("result_code").equalsIgnoreCase("4")) {
-                        System.out.println("验证码校验通过");
+                        logger.info("验证码校验通过");
                         checkedCode=true;
                     } else {
-                        System.out.println("验证码校验没有通过");
+                        logger.info("验证码校验没有通过");
                     }
                 } catch (Exception e) {
-                    System.out.println("验证码校验没有通过");
+                    logger.info("验证码校验没有通过");
                     e.printStackTrace();
                 } finally {
                     response.close();
@@ -725,6 +667,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             Map<String,String> map = new HashMap<String,String>();
 
             try {
+                logger.info("start login");
                 Thread.sleep(400);
                 headers = new BasicHeader[7];
                 headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
@@ -756,7 +699,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 if(null!=rsmap && rsmap.size()>0){
                     String code = String.valueOf(rsmap.get("result_code"))+"";
                     if (code.equalsIgnoreCase("0")) {
-                        System.out.println("登陆成功");
+                        logger.info("登陆成功");
 
                         HttpUriRequest userLogin = RequestBuilder.post()
                                 .setUri("https://"+this.hosts+"/otn/login/userLogin")
@@ -767,7 +710,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
                         login.addHeader("Connection","keep-alive");
                         response = httpclient.execute(login);
                         int statusCode = response.getStatusLine().getStatusCode();
-                        System.out.println("再次登陆userLogin："+ response.getStatusLine().getStatusCode());
+                        logger.info("再次登陆userLogin："+ response.getStatusLine().getStatusCode());
                         if(statusCode==302){
                             EntityUtils.consume(response.getEntity());
                             HttpUriRequest reload = RequestBuilder.get()//.post()
@@ -797,13 +740,13 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 System.out.println("登陆时发生错误");
                 return false;
             }
-
+            logger.info("check online status again");
             //再次校验登陆状态
             onlineMap = this.checkOnlineStatus(headers);
             String tk ="";
             if(null!=onlineMap && onlineMap.size()>0){
                 if("0".equals(onlineMap.get("result_code")+"")){
-                    System.out.println("再次验证时候已经登陆");
+                    logger.info("再次验证时候已经登陆");
                     tk =onlineMap.get("newapptk").toString();
 
                 }else{
@@ -813,7 +756,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             }
 
 
-
+            logger.info("start check client and get tk");
             //校验客户端
 
             HttpUriRequest uamauthclient = RequestBuilder.post()
@@ -832,10 +775,10 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 String jsonStr= EntityUtils.toString(entity);
                 System.out.println("entity " +jsonStr);
                 map = this.jsonBinder.fromJson(jsonStr,Map.class);
-                System.out.println("校验通过："+map.get("username"));
-                System.out.println("是否有tk参数");
-//                this.getAllCookies(this.cookieStore);
-                System.out.println("tk cookie获取结束");
+                logger.info("校验通过：{}",map.get("username"));
+                logger.info("cookie中是否有tk参数");
+                this.getAllCookies(this.cookieStore);
+                logger.info("tk cookie获取结束");
                 HttpUriRequest userLogin = RequestBuilder.get()
                         .setUri("https://"+this.hosts+"/otn/login/userLogin")
                         .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
@@ -844,7 +787,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 userLogin.addHeader("Connection","keep-alive");
                 response = httpclient.execute(userLogin);
                 statusCode = response.getStatusLine().getStatusCode();
-                System.out.println("userLogin statusCode:"+statusCode);
+                logger.info("userLogin statusCode:{}",statusCode);
                 EntityUtils.consume(response.getEntity());
 
                 //跳转到 用户页面
@@ -857,10 +800,10 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 initMy12306.addHeader("Connection","keep-alive");
                 response = httpclient.execute(initMy12306);
                 statusCode = response.getStatusLine().getStatusCode();
-                System.out.println("initMy12306 statusCode:"+statusCode);
+                logger.info("initMy12306 statusCode:{}",statusCode);
                 EntityUtils.consume(response.getEntity());
 
-                System.out.println("用户登录成功");
+                logger.info("用户登录成功");
                 //将成功的cookie写入文件
                 writeCookies2File();
                 return true;
@@ -868,8 +811,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             }
 
         }catch (Exception e){
-            System.out.println("登陆时发生错误");
-            e.printStackTrace();
+            logger.error("登陆时发生错误",e);
         }
         return false;
     }
@@ -940,7 +882,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
 
             String jsonStr= EntityUtils.toString(entity);
-            System.out.println("entity " +jsonStr);
+            logger.info("checkOnlineStatus entity:{}",jsonStr);
             map = jsonBinder.fromJson(jsonStr,Map.class);
 
         }catch (Exception e){
@@ -990,22 +932,21 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 if(response.getStatusLine().getStatusCode()==200){
                     HttpEntity entity = response.getEntity();
                     responseBody =EntityUtils.toString(entity);
-                    System.out.println("查询页面初始化成功");
+                    logger.info("查询页面初始化成功");
                     Pattern p=Pattern.compile("CLeftTicketUrl \\= '(.*?)';");
                     Matcher m=p.matcher(responseBody);
                     while(m.find()){
                         queryUrl=m.group(1);
                         setLeftTicketUrl(queryUrl);
-                        System.out.println("查询的地址是："+queryUrl);
+                        logger.info("查询的地址是：{}",queryUrl);
                     }
                     headers[2]= new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
                 }else{
-                    System.out.println("查询页面初始化失败 status错误");
+                    logger.warn("查询页面初始化失败 status错误:",response.getStatusLine().getStatusCode());
                 }
 
             }catch (Exception e){
-                System.out.println("查询页面初始化失败"+responseBody);
-                e.printStackTrace();
+                logger.error("查询页面初始化失败:{}",responseBody,e);
             }finally {
                 try{
                     response.close();
@@ -1036,10 +977,13 @@ public class ClientTicket /*implements ApplicationRunner*/{
     }*/
 
     public void resetCookieStore(){
-        cookieStore = new BasicCookieStore();
-        httpclient = HttpClients.custom()
-                .setDefaultCookieStore(cookieStore)
-                .build();
+//        cookieStore = new BasicCookieStore();
+        cookieStore.clear();
+//        httpclient = HttpClients.custom()
+//                .setDefaultCookieStore(cookieStore)
+//                .build();
+//        ct.cookieStore = cookieStore;
+//        ct.httpclient = httpclient;
     }
 
 }

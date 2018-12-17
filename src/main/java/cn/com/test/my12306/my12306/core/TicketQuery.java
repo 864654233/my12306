@@ -32,14 +32,12 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ConnectTimeoutException;
-import org.apache.http.conn.ConnectionPoolTimeoutException;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.net.SocketTimeoutException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -48,6 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TicketQuery implements  Runnable{
 
     public JsonBinder jsonBinder = JsonBinder.buildNonNullBinder(false);
+    private static Logger logger = LogManager.getLogger(TicketQuery.class);
     CommonUtil commonUtil = new CommonUtil();
 
     private BlockingQueue<Map<String,String>> queue ;
@@ -57,6 +56,10 @@ public class TicketQuery implements  Runnable{
         this.ct = ct;
     }
 
+    /*public TicketQuery() {
+        this.ct = ApplicationContextProvider.getBean(ClientTicket.class);
+        this.commonUtil = ApplicationContextProvider.getBean(CommonUtil.class);
+    }*/
 
     @SuppressWarnings("unchecked")
     @Override
@@ -72,7 +75,7 @@ public class TicketQuery implements  Runnable{
         Map<String,Integer> trainSeatMap = ct.getTrainSeatMap();
         Map<String,Long> trainSeatTimeMap = ct.getTrainSeatTimeMap();
 
-        while(true){
+        while(ct.canRun){
             CloseableHttpClient httpClient=null;
             try{
             httpClient = TicketHttpClient.getClient();
@@ -80,17 +83,15 @@ public class TicketQuery implements  Runnable{
             String queryIp = commonUtil.getIp();
 
             String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+commonUtil.getDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
-            System.out.println("ip:"+queryIp);
+//            System.out.println("ip:"+queryIp);
             HttpGet httpget = new HttpGet(urlStr);
             httpget.setHeader("Host", "kyfw.12306.cn");//设置host
                 httpget.setConfig(requestConfig);
             HttpResponse response = httpClient.execute(httpget);
             HttpEntity entity = response.getEntity();
             String content = EntityUtils.toString(entity, "UTF-8");
-//            System.out.println(content);
                 Map<String, Object> rsmap = null;
                 rsmap = this.jsonBinder.fromJson(content, Map.class);
-//                System.out.println(rsmap.size()+" "+rsmap);
                 String status = rsmap.get("httpstatus")+"";
                 if(status.equalsIgnoreCase("200")){
                     Map data = (Map)rsmap.get("data");
@@ -122,6 +123,7 @@ public class TicketQuery implements  Runnable{
                                 }else{
                                     trainSeatMap.put(chehao+"_"+tobuySeat,cishu+1);
                                     queue.put(map1);
+//                                    System.out.println(queue);
                                 }
                                }else{//第一次
                                    queue.put(map1);
@@ -136,16 +138,16 @@ public class TicketQuery implements  Runnable{
                            System.out.println();
                            queue.put(mapQueue);*/
                        }
-                       System.out.println(queryIp + "查询成功");
+//                       System.out.println(queryIp + "查询成功");
+                       logger.info("{}:查询成功",queryIp);
                     }
                 }
             }catch (ConnectTimeoutException e1){
-                System.out.println("查询超时1");
+                logger.error("ConnectTimeout查询超时1");
             }catch (SocketTimeoutException se){
-                System.out.println("查询超时");
+                logger.error("socketTimeout查询超时");
             }catch (Exception e){
-                System.out.println("查询出錯");
-               e.printStackTrace();
+                logger.error("查询出錯",e);
             }finally {
                 try{
                     httpClient.close();

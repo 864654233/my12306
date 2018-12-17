@@ -27,13 +27,13 @@
 package cn.com.test.my12306.my12306.core;
 
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
-import cn.com.test.my12306.my12306.core.util.mail.MailUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.methods.RequestBuilder;
+import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
@@ -65,17 +65,38 @@ public class TicketBook implements  Runnable{
 
     private BlockingQueue<Map<String,String>> queue ;
     private CloseableHttpClient httpclient;
+    private BasicCookieStore cookieStore;
     private Header[] headers;
     private ClientTicket ct;
     private String bookRancode="";
     private static Logger logger = LogManager.getLogger(TicketBook.class);
 
-    CommonUtil commonUtil = new CommonUtil();
+    CommonUtil commonUtil = new CommonUtil() ;
 
-    public TicketBook(ClientTicket ct,BlockingQueue<Map<String, String>> queue, CloseableHttpClient httpclient, Header[] headers) {
+    public TicketBook(ClientTicket ct,BlockingQueue<Map<String, String>>queue, CloseableHttpClient httpclient, Header[] headers,BasicCookieStore cookieStore) {
         this.ct = ct;
         this.queue = queue;
         this.httpclient = httpclient;
+        this.headers = headers;
+        this.cookieStore = cookieStore;
+        if(this.headers.length!=8){
+            this.headers = new BasicHeader[8];
+            this.headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+            this.headers[1] = new BasicHeader("Host","kyfw.12306.cn");
+            this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
+            this.headers[3] = new BasicHeader("Accept","*/*");
+            this.headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
+            this.headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
+            this.headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded");
+            this.headers[7] = new BasicHeader("Origin","https://kyfw.12306.cn");
+//            this.headers[8] = new BasicHeader("X-Requested-With","XMLHttpRequest");
+        }else{
+            this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
+        }
+    }
+
+
+    public void resetHeaders(){
         this.headers = headers;
         if(this.headers.length!=8){
             this.headers = new BasicHeader[8];
@@ -97,12 +118,15 @@ public class TicketBook implements  Runnable{
     @Override
     public void run(){
             String orderId ="";
+        Map<String,String> map =null;
             try{
                 kaishi:
-                while(orderId.equals("") && queue.size()>0){
+                while(orderId.equals("") && (map= queue.take())!=null){
+                    resetHeaders();
                     this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
-                Map<String,String> map =null;
-                map= queue.take();//获取的整个车次信息
+
+                ;//获取的整个车次信息
+                    logger.info("有票了，开始预定");
                 //校验是否登陆 略
                     int flag = subOrder(map.get("secret"));
                 if(flag==1) { //跳转到提交订单页
@@ -182,13 +206,12 @@ public class TicketBook implements  Runnable{
                     //进入排队等待
                     orderId = waitOrder(globalRepeatSubmitToken);
                     orderId=orderId.equals("null")?"":orderId;
-                    System.out.println("获取的订单Id：" + orderId);
+                    logger.info("获取的订单Id：{}",orderId);
                     if (!orderId.equals("")) {
                         //订票成功 退出程序
-                        System.out.println("购票成功，订单Id：" + orderId+",赶紧支付去吧");
+                        logger.info("购票成功，订单Id：{},赶紧支付去吧",orderId);
 //                        new TipTest("","","订票成功，订单号："+orderId);
                         ct.sendSuccessMail("购票成功，订单ID："+orderId);
-                        Thread.sleep(3000);
                         System.exit(0);
                     } else {
                         //重新开始查询
@@ -205,18 +228,21 @@ public class TicketBook implements  Runnable{
                     headers[1] = new BasicHeader("Host","kyfw.12306.cn");
                     headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
                     ct.login(headers);
+//                    this.ct = ct;
+                    this.queue = ct.queue;
+                    this.httpclient = ct.httpclient;
                     continue kaishi ;
                 }
 
                 }
-                if(orderId.equals("")){//queue 取完了 还没有订单 重新刷
+               /* if(orderId.equals("")){//queue 取完了 还没有订单 重新刷
                     ct.reshua(headers);
-                }
+                }*/
 
                 Thread.sleep(200L);
             }catch (Exception e){
-                System.out.println("预定时出錯");
-               e.printStackTrace();
+//               e.printStackTrace();
+               logger.error("预定时出错",e);
             }
 
 
@@ -382,7 +408,7 @@ public class TicketBook implements  Runnable{
                 for(String u1:users){
                     if(u1.equals(u.get("passenger_name"))){
                         oldPassengerStr+=u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("passenger_type")+"_";
-                        passengerTicketStr+=commonUtil.seatMap.get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",N_";
+                        passengerTicketStr+=CommonUtil.seatMap.get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",N_";
                     }
                 }
             }
@@ -486,7 +512,8 @@ public class TicketBook implements  Runnable{
      * 0 失败；1：成功；2：可能被封或退出登陆
      * @return
      */
-    public int subOrder(String secretStr){
+
+    public synchronized int subOrder(String secretStr){
         CloseableHttpResponse response=null;
 
 
@@ -524,24 +551,24 @@ public class TicketBook implements  Runnable{
 
             } else if (null != rsmap.get("status") && rsmap.get("status").toString().equals("false")) {
                 String errMsg = rsmap.get("messages") + "";
-                System.out.println("mmmmm" + errMsg + " fffffffffff " + errMsg.contains("未处理的订单"));
+                logger.info(errMsg);
                 if (errMsg.contains("未处理的订单")) {
 //                    new TipTest("","","您有未处理订单，请查询");
-                    System.out.println("您有未完成订单，请处理");
+                    logger.info("您有未完成订单，请处理");
                     System.exit(0);
                 } else if (errMsg.contains("当前时间不可以订票")) {
-                    System.out.println("系统维护时间不能订票");
+                    logger.info("系统维护时间不能订票");
                     System.exit(0);
                 }
             } else {
-                System.out.println("预定时候出错了：" + responseBody);
+                logger.info("预定时候出错了：" + responseBody);
             }
         }else{
-                System.out.println("点击预定按钮失败了，查看是否被禁或者已经退出登陆");
+                logger.info("点击预定按钮失败了，查看是否被禁或者已经退出登陆");
                 return 2;
             }
         }catch (Exception e){
-            System.out.println("点击预定按钮成功");
+            logger.info("点击预定按钮成功");
             e.printStackTrace();
         }finally {
             try{
@@ -663,6 +690,7 @@ public class TicketBook implements  Runnable{
                 if(ifShowPassCode.equals("Y")){
                     //验证码
                     rs="Y";
+                    logger.info("需要验证码"+rs);
                 }else{
                     rs="N";
                 }

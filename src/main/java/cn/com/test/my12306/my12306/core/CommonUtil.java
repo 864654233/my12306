@@ -381,9 +381,12 @@ public class CommonUtil {
             if(null!=xibiemap){
                 for(String xbie:xb){
                     String cnt=xibiemap.get(xbie);
+                    String secretStr = xibiemap.get("secret");
                     if(null!=cnt && !"无".equals(cnt) && !"".equals(cnt)){
                         System.out.println();
-                        if(!"有".equals(cnt) && Integer.parseInt(cnt)<CommonUtil.user.split(",").length){
+                        if("".equals(secretStr)){
+                            System.out.println(c+" "+xbie+"未开售");
+                        }else  if(!"有".equals(cnt) && Integer.parseInt(cnt)<CommonUtil.user.split(",").length){
                             System.out.println(c+" "+xbie+" 有票："+cnt+"但是不够"+CommonUtil.user+" "+CommonUtil.user.split(",").length+"个,忽略" );
                         }else{
                             System.out.println(c+" "+xbie+" 有票："+cnt );
