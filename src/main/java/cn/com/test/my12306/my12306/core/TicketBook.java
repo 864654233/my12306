@@ -39,6 +39,7 @@ import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.stereotype.Component;
 
 import javax.swing.*;
 import java.awt.event.MouseAdapter;
@@ -59,6 +60,7 @@ import java.util.regex.Pattern;
  * 下单参考 ：https://www.jianshu.com/p/6b1f94e32713
  * 和    http://www.cnblogs.com/small-bud/p/7967650.html
  */
+//@Component
 public class TicketBook implements  Runnable{
 
     public JsonBinder jsonBinder = JsonBinder.buildNonNullBinder(false);
@@ -81,14 +83,15 @@ public class TicketBook implements  Runnable{
         this.cookieStore = cookieStore;
         if(this.headers.length!=8){
             this.headers = new BasicHeader[8];
-            this.headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+            this.headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
             this.headers[1] = new BasicHeader("Host","kyfw.12306.cn");
             this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
             this.headers[3] = new BasicHeader("Accept","*/*");
             this.headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
             this.headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
             this.headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded");
-            this.headers[7] = new BasicHeader("Origin","https://kyfw.12306.cn");
+//            this.headers[7] = new BasicHeader("Origin","https://kyfw.12306.cn");
+            this.headers[7] = new BasicHeader("Cache-Control","no-cache");
 //            this.headers[8] = new BasicHeader("X-Requested-With","XMLHttpRequest");
         }else{
             this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
@@ -100,14 +103,15 @@ public class TicketBook implements  Runnable{
         this.headers = headers;
         if(this.headers.length!=8){
             this.headers = new BasicHeader[8];
-            this.headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+            this.headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
             this.headers[1] = new BasicHeader("Host","kyfw.12306.cn");
             this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
             this.headers[3] = new BasicHeader("Accept","*/*");
             this.headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
             this.headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
             this.headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded");
-            this.headers[7] = new BasicHeader("Origin","https://kyfw.12306.cn");
+//            this.headers[7] = new BasicHeader("Origin","https://kyfw.12306.cn");
+            this.headers[7] = new BasicHeader("Cache-Control","no-cache");
 //            this.headers[8] = new BasicHeader("X-Requested-With","XMLHttpRequest");
         }else{
             this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc");
@@ -153,12 +157,12 @@ public class TicketBook implements  Runnable{
                                 //获取验证码
                                 String valicode = getCode("", headers);
 
-                                System.out.println("验证码：" + valicode);
+                               logger.info("验证码：" + valicode);
 
 
                                 //校验验证码
                                 HttpUriRequest checkCode = RequestBuilder.post()
-                                        .setUri(new URI("https://kyfw.12306.cn/otn/passcodeNew/checkRandCodeAnsyn"))
+                                        .setUri(new URI("https://"+ct.hosts+"/otn/passcodeNew/checkRandCodeAnsyn"))
                                         .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                                         .addParameter("randCode", valicode)
                                         .addParameter("REPEAT_SUBMIT_TOKEN", globalRepeatSubmitToken)
@@ -171,19 +175,19 @@ public class TicketBook implements  Runnable{
                                     HttpEntity entity = response.getEntity();
                                     String responseBody=EntityUtils.toString(entity);
                                     rsmap = this.jsonBinder.fromJson(responseBody, Map.class);
-//                System.out.println("校验：" + response.getStatusLine().getStatusCode() + " " + entity.getContent() + " abc " + EntityUtils.toString(entity));
+//               logger.info("校验：" + response.getStatusLine().getStatusCode() + " " + entity.getContent() + " abc " + EntityUtils.toString(entity));
                                     if ((rsmap.get("status")+"").equalsIgnoreCase("true")) {
                                         Map<String, Object> dataMap = (Map<String, Object>)rsmap.get("data");
                                         String msg = rsmap.get("msg")+"";
                                         if(msg.equalsIgnoreCase("TRUE")){
-                                        System.out.println("验证码校验通过");
+                                       logger.info("验证码校验通过");
                                         checkedCode=true;
                                         }
                                     } else {
-                                        System.out.println("验证码校验没有通过");
+                                       logger.info("验证码校验没有通过");
                                     }
                                 } catch (Exception e) {
-                                    System.out.println("验证码校验没有通过");
+                                   logger.info("验证码校验没有通过");
                                     e.printStackTrace();
                                 } finally {
                                     response.close();
@@ -193,7 +197,7 @@ public class TicketBook implements  Runnable{
                         }
                         if (rs.equals("X")) {
                             //预订失败 直接返回
-                            System.out.println("预定失败 返回X");
+                           logger.info("预定失败 返回X");
                             rsCode = "B";
                             continue redo;
                         }
@@ -201,7 +205,10 @@ public class TicketBook implements  Runnable{
                     //getQueue 略
                     getQueueCount(globalRepeatSubmitToken, map);
                     //确认订单信息
-                    confirmSingle(globalRepeatSubmitToken, key_check_isChange, map.get("toBuySeat"), map);
+                   boolean confirmFlag = confirmSingle(globalRepeatSubmitToken, key_check_isChange, map.get("toBuySeat"), map);
+                   if(!confirmFlag){
+                       continue kaishi ;
+                   }
 
                     //进入排队等待
                     orderId = waitOrder(globalRepeatSubmitToken);
@@ -224,9 +231,9 @@ public class TicketBook implements  Runnable{
                     ct.resetCookiesFile();
                     ct.resetCookieStore();
                      headers = new BasicHeader[3];
-                    headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+                    headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
                     headers[1] = new BasicHeader("Host","kyfw.12306.cn");
-                    headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
+                    headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
                     ct.login(headers);
 //                    this.ct = ct;
                     this.queue = ct.queue;
@@ -257,7 +264,7 @@ public class TicketBook implements  Runnable{
     public String getCode(String url,Header[] headers) throws IOException {
         //JFrame frame = new JFrame("验证码");
         this.bookRancode="";
-        System.out.println("获取验证码的地址："+url);
+       logger.info("获取验证码的地址："+url);
 //        new TipTest("","","请输入验证码");
         JLabel label = new JLabel(new ImageIcon(getCodeByte(url,headers)),
                 JLabel.CENTER);
@@ -287,7 +294,7 @@ public class TicketBook implements  Runnable{
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         byte[] bytse = null;
         try {
-            HttpGet hget = new HttpGet("https://kyfw.12306.cn/otn/passcodeNew/getPassCodeNew?module=passenger&rand=randp&" + Math.random());
+            HttpGet hget = new HttpGet("https://"+ct.hosts+"/otn/passcodeNew/getPassCodeNew?module=passenger&rand=randp&" + Math.random());
             for(Header h:headers){
                 hget.addHeader(h);
             }
@@ -318,7 +325,7 @@ public class TicketBook implements  Runnable{
             int x=e.getX();
             int y=e.getY();
             bookRancode+=bookRancode.equals("")?x+","+(y-30):","+x+","+(y-30);
-            System.out.println(x+","+y+"  rancode:"+bookRancode);
+           logger.info(x+","+y+"  rancode:"+bookRancode);
         }
     }
 
@@ -335,7 +342,7 @@ public class TicketBook implements  Runnable{
         List<Map<String,String>> users =null;
         try {
         HttpUriRequest checkCode = RequestBuilder.post()
-                .setUri(new URI("https://kyfw.12306.cn/otn/confirmPassenger/getPassengerDTOs"))
+                .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/getPassengerDTOs"))
                 .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                 .addHeader(headers[7])
                 .addParameter("REPEAT_SUBMIT_TOKEN", token)
@@ -374,13 +381,13 @@ public class TicketBook implements  Runnable{
                 index_id	0
                 */
                users=(List<Map<String,String>>)dataMap.get("normal_passengers");
-                System.out.println("获取用户乘客信息完成"+responseBody);
+               logger.info("获取用户乘客信息完成"+responseBody);
 
             } else {
-                System.out.println("获取用户乘客信息失败"+responseBody);
+               logger.info("获取用户乘客信息失败"+responseBody);
             }
         }catch (Exception e){
-            System.out.println("获取用户乘客信息失败1");
+           logger.info("获取用户乘客信息失败1");
             e.printStackTrace();
         }finally {
             try{
@@ -415,7 +422,7 @@ public class TicketBook implements  Runnable{
             passengerTicketStr=passengerTicketStr.endsWith("_")?passengerTicketStr.substring(0,passengerTicketStr.length()-1):passengerTicketStr;
 
             HttpUriRequest autoSubmi = RequestBuilder.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/confirmPassenger/autoSubmitOrderRequest"))
+                    .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/autoSubmitOrderRequest"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                     .addParameter("bed_level_order_num", "000000000000000000000000000000")
                     .addParameter("cancel_flag", "2")
@@ -451,12 +458,12 @@ public class TicketBook implements  Runnable{
 
 
             } else {
-                System.out.println("自动预订失败");
+               logger.info("自动预订失败");
                 flag=false;
             }
         }catch (Exception e){
             flag=false;
-            System.out.println("自动预订出错");
+           logger.info("自动预订出错");
             e.printStackTrace();
         }finally {
             try{
@@ -479,7 +486,7 @@ public class TicketBook implements  Runnable{
 
 
         HttpUriRequest checkUser = RequestBuilder.post()
-                .setUri(new URI("https://kyfw.12306.cn/otn/login/checkUser"))
+                .setUri(new URI("https://"+ct.hosts+"/otn/login/checkUser"))
                 .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                 .addParameter("_json_att", "")
                 .build();
@@ -495,7 +502,7 @@ public class TicketBook implements  Runnable{
 
             }
         }catch (Exception e){
-            System.out.println("檢查用戶狀態失敗");
+           logger.info("檢查用戶狀態失敗");
             e.printStackTrace();
         }finally {
             try{
@@ -523,7 +530,7 @@ public class TicketBook implements  Runnable{
             Header headera = new BasicHeader("X-Requested-With","XMLHttpRequest");
             String queryIp = commonUtil.getIp();
             HttpUriRequest checkUser = RequestBuilder.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/leftTicket/submitOrderRequest"))
+                    .setUri(new URI("https://"+ct.hosts+"/otn/leftTicket/submitOrderRequest"))
 //                    .setUri(new URI("https://"+queryIp+"/otn/leftTicket/submitOrderRequest"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                     .addHeader(headera)
@@ -544,9 +551,9 @@ public class TicketBook implements  Runnable{
             String responseBody = EntityUtils.toString(entity);
             if (!"".equals(responseBody)){
                 rsmap = jsonBinder.fromJson(responseBody, Map.class);
-//            System.out.println("预定时候出错了？："+responseBody);
+//           logger.info("预定时候出错了？："+responseBody);
             if (null != rsmap.get("status") && rsmap.get("status").toString().equals("true")) {
-                System.out.println("点击预定按钮成功：" + responseBody);
+               logger.info("点击预定按钮成功：" + responseBody);
                 return 1;
 
             } else if (null != rsmap.get("status") && rsmap.get("status").toString().equals("false")) {
@@ -555,6 +562,7 @@ public class TicketBook implements  Runnable{
                 if (errMsg.contains("未处理的订单")) {
 //                    new TipTest("","","您有未处理订单，请查询");
                     logger.info("您有未完成订单，请处理");
+                    ct.sendSuccessMail("您有未完成订单，请处理");
                     System.exit(0);
                 } else if (errMsg.contains("当前时间不可以订票")) {
                     logger.info("系统维护时间不能订票");
@@ -591,7 +599,7 @@ public class TicketBook implements  Runnable{
         String responseBody = "";
         try{
             HttpUriRequest confirm = RequestBuilder.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/confirmPassenger/initDc"))
+                    .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/initDc"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                     .addHeader(headers[7])
                     .addParameter("_json_att", "")
@@ -603,7 +611,7 @@ public class TicketBook implements  Runnable{
             if(response.getStatusLine().getStatusCode()==200){
                 HttpEntity entity = response.getEntity();
                 responseBody =EntityUtils.toString(entity);
-                System.out.println("initDc成功");
+               logger.info("initDc成功");
                 Pattern p=Pattern.compile("globalRepeatSubmitToken \\= '(.*?)';");
                 Matcher m=p.matcher(responseBody);
                 while(m.find()){
@@ -616,11 +624,11 @@ public class TicketBook implements  Runnable{
                 }
                 this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/confirmPassenger/initDc");
             }else{
-                System.out.println("initDc失败 status错误");
+               logger.info("initDc失败 status错误");
             }
 
         }catch (Exception e){
-            System.out.println("initDc失败"+responseBody);
+           logger.info("initDc失败"+responseBody);
             e.printStackTrace();
         }finally {
             try{
@@ -664,7 +672,7 @@ public class TicketBook implements  Runnable{
 
              */
             HttpUriRequest checkOrder = RequestBuilder.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/confirmPassenger/checkOrderInfo"))
+                    .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/checkOrderInfo"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                     .addParameter("bed_level_order_num", "000000000000000000000000000000")
                     .addParameter("cancel_flag", "2")
@@ -695,7 +703,7 @@ public class TicketBook implements  Runnable{
                     rs="N";
                 }
                 logger.info("是否需要验证码："+rs+" 需要等待安全期："+ifShowPassCodeTime);
-                Thread.sleep(Integer.parseInt(ifShowPassCodeTime));
+//                Thread.sleep(Integer.parseInt(ifShowPassCodeTime));
                 //获取余票信息 不是必须？
 
                 //post https://kyfw.12306.cn/otn/confirmPassenger/confirmSingleForQueueAsys 生成车票 可能会302
@@ -705,13 +713,13 @@ public class TicketBook implements  Runnable{
 
 
             } else {
-                System.out.println("选择乘客提交订单失败"+responseBody);
-                System.out.println("选择乘客提交订单失败"+rsmap.get("status")+" "+rsmap.get("messages"));
+               logger.info("选择乘客提交订单失败"+responseBody);
+               logger.info("选择乘客提交订单失败"+rsmap.get("status")+" "+rsmap.get("messages"));
                 rs="X";
             }
 
         }catch (Exception e){
-            System.out.println("选择乘客提交订单失败"+responseBody);
+           logger.info("选择乘客提交订单失败"+responseBody);
             e.printStackTrace();
             rs="X";
         }finally {
@@ -737,7 +745,7 @@ public class TicketBook implements  Runnable{
         String responseBody ="",rs ="";
         try{
             HttpUriRequest confirm = RequestBuilder.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/confirmPassenger/getQueueCount"))
+                    .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/getQueueCount"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                     .addParameter("fromStationTelecode", map.get("fromStationTelecode"))
                     .addParameter("toStationTelecode", map.get("toStationTelecode"))
@@ -759,7 +767,7 @@ public class TicketBook implements  Runnable{
             if(response.getStatusLine().getStatusCode()==200){
 
                 responseBody =EntityUtils.toString(entity);
-                System.out.println("查询排队和余票成功"+responseBody);
+               logger.info("查询排队和余票成功"+responseBody);
                 Map<String, Object> rsmap = jsonBinder.fromJson(responseBody, Map.class);
                 if (rsmap.get("status").toString().equals("true")) {
                     Map<String, Object> data=(Map<String, Object>)rsmap.get("data");
@@ -768,11 +776,11 @@ public class TicketBook implements  Runnable{
                 }
 
             }else{
-                System.out.println("查询排队和余票失败");
+               logger.info("查询排队和余票失败");
             }
 
         }catch (Exception e){
-            System.out.println("查询排队和余票失败"+responseBody);
+           logger.info("查询排队和余票失败"+responseBody);
             e.printStackTrace();
         }finally {
             try{
@@ -814,7 +822,7 @@ public class TicketBook implements  Runnable{
      * 请求体相同
      *
      */
-    public void confirmSingle(String token,String key_check_isChange,String seat,Map<String,String> map){
+    public boolean confirmSingle(String token,String key_check_isChange,String seat,Map<String,String> map){
         CloseableHttpResponse response=null;
         Map<String,Object> rsMap= new HashMap<String,Object>();
         String  responseBody="";
@@ -834,7 +842,7 @@ public class TicketBook implements  Runnable{
             passengerTicketStr=passengerTicketStr.endsWith("_")?passengerTicketStr.substring(0,passengerTicketStr.length()-1):passengerTicketStr;
 
             HttpUriRequest confirm = RequestBuilder.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/confirmPassenger/confirmSingleForQueue"))
+                    .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/confirmSingleForQueue"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                     .addParameter("choose_seats", "")
                     .addParameter("dwAll", "N")
@@ -863,22 +871,26 @@ public class TicketBook implements  Runnable{
                     Map<String, Object> data=(Map<String, Object>)rsmap.get("data");
                     String subStatus = data.get("submitStatus")+"";//true为成功 false为失败 需要查看errMsg
                     if(subStatus.equals("true")){
-                        System.out.println("确认提交订单成功"+responseBody);
+                       logger.info("确认提交订单成功"+responseBody);
+                       return true;
                     }else{
                         String errMsg =data.get("errMsg")+"";
-                        System.out.println("确认提交订单失败"+errMsg+" 返回内容："+responseBody);
+                       logger.info("确认提交订单失败"+errMsg+" 返回内容："+responseBody);
+                       return false;
                     }
-//                    System.out.println("确认提交订单成功"+responseBody);
+//                   logger.info("确认提交订单成功"+responseBody);
                 }else{
-                    System.out.println("确认提交订单失败"+responseBody);
+                   logger.info("确认提交订单失败"+responseBody);
+                   return false;
                 }
 
             }else{
-                System.out.println("确认提交订单失败"+responseBody);
+               logger.info("确认提交订单失败"+responseBody);
+                return false;
             }
 
         }catch (Exception e){
-            System.out.println("确认提交订单失败"+responseBody);
+           logger.info("确认提交订单失败"+responseBody);
             e.printStackTrace();
         }finally {
             try{
@@ -887,6 +899,7 @@ public class TicketBook implements  Runnable{
 
             }
         }
+        return false;
     }
 
     public String waitOrder(String token) {
@@ -898,7 +911,7 @@ public class TicketBook implements  Runnable{
 //            while(orderId.equals("")){
             while (Integer.parseInt(waitTime)>=0) { //是不是-1啊 忘记了
                 HttpUriRequest waitOrder = RequestBuilder.get()
-                        .setUri("https://kyfw.12306.cn/otn/confirmPassenger/queryOrderWaitTime?random=1519567822886&tourFlag=dc&_json_att=&REPEAT_SUBMIT_TOKEN=" + token)
+                        .setUri("https://"+ct.hosts+"/otn/confirmPassenger/queryOrderWaitTime?random=1519567822886&tourFlag=dc&_json_att=&REPEAT_SUBMIT_TOKEN=" + token)
                         .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                         .build();
 
@@ -911,21 +924,31 @@ public class TicketBook implements  Runnable{
                     waitTime = data.get("waitTime") + "";
                     String waitCount = data.get("waitCount") + "";
                     orderId = data.get("orderId") + "";
-                    System.out.println("前面" + waitCount + "人，需等待：" + waitTime + "");
+                   logger.info("前面" + waitCount + "人，需等待：" + waitTime + "");
                     message = data.get("msg") + "";
-                    if(null!=data.get("msg")){//已有订单
-                        System.out.println("dddddd"+data.get("msg"));
-                        //只打印消息 继续从queue里获取其他票 尝试下单
+                   if(null!=message){//已有订单
+                       if(message.toString().contains("行程冲突")){
+                           logger.info(message.toString());
+                           ct.sendSuccessMail("行程冲突");
+                           System.exit(0);
+                       }
+                       if(message.toString().contains("取消次数过多")){
+                           logger.info(message.toString());
+                           ct.sendSuccessMail("取消次数过多,请切换账号");
+                           System.exit(0);
+                       }
+                       logger.info("dddddd"+data.get("msg"));
+                       //只打印消息 继续从queue里获取其他票 尝试下单
 //                        System.exit(0);
-                    }
+                   }
                     Thread.sleep(1000);
                 }
             }
             if(orderId.equals("")){
-                System.out.println("获取订单号失败："+message);
+               logger.info("获取订单号失败："+message);
             }
         } catch (Exception e) {
-            System.out.println("查询订单号失败");
+           logger.info("查询订单号失败");
             e.printStackTrace();
         }
         return orderId;

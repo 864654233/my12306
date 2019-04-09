@@ -26,10 +26,17 @@
  */
 package cn.com.test.my12306.my12306.core;
 
+import org.apache.http.HttpHost;
+import org.apache.http.NoHttpResponseException;
+import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.DefaultProxyRoutePlanner;
 import org.apache.http.ssl.SSLContextBuilder;
 import org.apache.http.ssl.TrustStrategy;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import javax.net.ssl.SSLContext;
 import java.security.cert.CertificateException;
@@ -38,7 +45,7 @@ import java.security.cert.X509Certificate;
 public class TicketHttpClient {
 
 
-
+    private static Logger logger = LogManager.getLogger(TicketHttpClient.class);
 
     public static CloseableHttpClient getClient() {
         CloseableHttpClient httpClient = null;
@@ -54,6 +61,25 @@ public class TicketHttpClient {
             }).build();
 
             httpClientBuilder.setSSLContext(sslContext);
+            httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler(0,false));
+            HttpHost proxy = new HttpHost("106.14.162.110", 8080, "http");
+            DefaultProxyRoutePlanner routePlanner = new DefaultProxyRoutePlanner(proxy);
+//            httpClientBuilder.setRoutePlanner(routePlanner);
+           /* httpClientBuilder.setRetryHandler((exception, executionCount, context) -> {
+                if (executionCount > 3) {
+                    logger.warn("Maximum tries reached for client http pool ");
+                    return false;
+                }
+
+                if (exception instanceof NoHttpResponseException     //NoHttpResponseException 重试
+                        || exception instanceof ConnectTimeoutException //连接超时重试
+//              || exception instanceof SocketTimeoutException    //响应超时不重试，避免造成业务数据不一致
+                ) {
+                    logger.warn("NoHttpResponseException on " + executionCount + " call");
+                    return true;
+                }
+                return false;
+            });*/
             httpClient = httpClientBuilder.build();
         } catch (Exception e) {
             e.printStackTrace();

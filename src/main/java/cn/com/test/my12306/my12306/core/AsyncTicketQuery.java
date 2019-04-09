@@ -26,72 +26,125 @@
  */
 package cn.com.test.my12306.my12306.core;
 
+import cn.com.test.my12306.my12306.core.proxy.ProxyUtil;
+import cn.com.test.my12306.my12306.core.util.FileUtil;
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
-//@Component
-public class TicketQuery implements  Runnable{
+@Component
+public class AsyncTicketQuery {
 
     public JsonBinder jsonBinder = JsonBinder.buildNonNullBinder(false);
-    private static Logger logger = LogManager.getLogger(TicketQuery.class);
-    private static CommonUtil commonUtil = new CommonUtil();
+    private static Logger logger = LogManager.getLogger(AsyncTicketQuery.class);
+    @Autowired
+    private CommonUtil commonUtil;
 
     private BlockingQueue<Map<String,String>> queue ;
+    @Autowired
     private ClientTicket ct;
-    public TicketQuery(BlockingQueue<Map<String,String>> queue,ClientTicket ct){
-        this.queue=queue;
-        this.ct = ct;
-    }
 
-    /*public TicketQuery() {
-        this.ct = ApplicationContextProvider.getBean(ClientTicket.class);
-        this.commonUtil = ApplicationContextProvider.getBean(CommonUtil.class);
-    }*/
+    @Autowired
+    ProxyUtil proxyUtil;
+  /*  @Autowired
+    ClientTicketA cta;*/
 
-    @SuppressWarnings("unchecked")
-    @Override
+    @Async("myTaskAsyncPool")
     public void run(){
+        /*
+            代理地址：http://www.xiladaili.com/gaoni/4/
+         */
+        //代理设置
+        HttpHost proxy = new HttpHost("119.101.116.253",9999);
+//        HttpHost proxy1 = new HttpHost("106.14.162.110", 8080, "http");
+//        HttpHost proxy1 = new HttpHost("110.73.5.53", 8123);
+        HttpHost proxy1 = new HttpHost("118.163.120.181", 58837);
 
-        //超时设置
-        RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout(3000).setConnectionRequestTimeout(3000)
-                .setSocketTimeout(3000).build();
 
 
 
         Map<String,Integer> trainSeatMap = ct.getTrainSeatMap();
         Map<String,Long> trainSeatTimeMap = ct.getTrainSeatTimeMap();
+        queue = ct.queue;
+        Random random = new Random();
+        int max=3000;
+        int min=1500;
+//        max = 0;
 
         while(ct.canRun){
+            if(commonUtil.getUseProxy()==1) {
+                String proxIp = proxyUtil.getProxyIp();
+                if (null != proxIp) {
+                    proxy1 = new HttpHost(proxIp.split(":")[0], Integer.valueOf(proxIp.split(":")[1]));
+                    logger.info("有代理{}", proxIp);
+                } else {
+                    proxy1 = null;
+                }
+            }
+            //超时设置
+            RequestConfig requestConfig = RequestConfig.custom()
+                    .setConnectTimeout(3000).setConnectionRequestTimeout(20000)
+//                    .setProxy(proxy1)
+                    .setSocketTimeout(15000).build();
+            if(commonUtil.getUseProxy()==1){
+                requestConfig = RequestConfig.custom()
+                        .setConnectTimeout(3000).setConnectionRequestTimeout(20000)
+                        .setProxy(proxy1)
+                        .setSocketTimeout(15000).build();
+            }
+
+
             long startTime = System.currentTimeMillis();
             CloseableHttpClient httpClient=null;
             try{
+                int a = max==0?0:random.nextInt(max)%(max-min+1) + min;
+                Thread.sleep(Long.parseLong(a+"") );
+                if(ct.nullCount.intValue()>100){
+                    logger.info("多次查询错误，重置查询地址");
+                    ct.nullCount.set(0);
+                    ct.queryInit(null);
+                }
             httpClient = TicketHttpClient.getClient();
 
-            String queryIp = commonUtil.getIp();
-
+            String queryIp = commonUtil.getUseProxy()==1 && proxyUtil.getProxySize()>=8?"kyfw.12306.cn":commonUtil.getIp();
+//            String queryIp = commonUtil.getIp();
+//            ct.setLeftTicketUrl("leftTicket/queryA");
             String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+commonUtil.getDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
-//            System.out.println("ip:"+queryIp);
+//            logger.info("url:{}",urlStr);
             HttpGet httpget = new HttpGet(urlStr);
             httpget.setHeader("Host", "kyfw.12306.cn");//设置host
+                httpget.setHeader("If-Modified-Since", "0");
+                httpget.setHeader("Cache-Control", "no-cache");
+                httpget.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+                httpget.setHeader("Content-Type", "application/x-www-form-urlencoded");
                 httpget.setConfig(requestConfig);
             HttpResponse response = httpClient.execute(httpget);
             HttpEntity entity = response.getEntity();
+            if(response.getStatusLine().getStatusCode()!=200){
+                logger.info("查询错误：{}，statusline:{}",ct.nullCount.get(),response.getStatusLine());
+                ct.nullCount.addAndGet(1);
+                ((CloseableHttpResponse) response).close();
+                continue ;
+            }
             String content = EntityUtils.toString(entity, "UTF-8");
                 Map<String, Object> rsmap = null;
                 if(content.contains("DOCTYPE html PUBLIC") || content.contains("502 Bad Gateway")){
@@ -151,15 +204,31 @@ public class TicketQuery implements  Runnable{
                            queue.put(mapQueue);*/
                        }
 //                       System.out.println(queryIp + "查询成功");
-                       logger.info("==========================={}:查询成功=================",queryIp);
+//                        ct.ipSet.add(queryIp);
+                        //有一次查询成功，说明地址还能用
+                        ct.nullCount.set(0);
+                       logger.info("==========================={}:查询成功,随机等待{}毫秒,ipSet {}=================",queryIp,a,ct.ipSet.size());
+                       if(ct.ipSet.size()>500){
+                           String ips ="";
+                           for(String str:ct.ipSet){
+                               ips+="\""+str+"\",";
+                           }
+                           FileUtil.saveAs(ips,"D:/my12306/allIP.txt");
+                           System.exit(0);
+                       }
                     }
                 }
+                ((CloseableHttpResponse) response).close();
             }catch (ConnectTimeoutException e1){
-                logger.error("ConnectTimeout查询超时1");
+                long connTime = System.currentTimeMillis();
+                logger.info("ConnectTimeout查询超时1,用时：{}秒{}",(connTime-startTime)/1000,(connTime-startTime)%1000);
+//                logger.error("ConnectTimeout查询超时1");
             }catch (SocketTimeoutException se){
                 logger.error("socketTimeout查询超时");
+            }catch (InterruptedException ie){
+
             }catch (Exception e){
-                logger.error("查询出錯",e);
+                logger.error("查询出錯x",e);
             }finally {
                 try{
                     httpClient.close();

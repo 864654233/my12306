@@ -26,31 +26,43 @@
  */
 package cn.com.test.my12306.my12306.core;
 
+import cn.com.test.my12306.my12306.core.proxy.ProxyUtil;
 import cn.com.test.my12306.my12306.core.util.DateUtil;
 import cn.com.test.my12306.my12306.core.util.FileUtil;
 import cn.com.test.my12306.my12306.core.util.ImageUtil;
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
 import cn.com.test.my12306.my12306.core.util.mail.MailUtils;
+import com.sun.net.httpserver.Headers;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.methods.RequestBuilder;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.cookie.BasicClientCookie;
 import org.apache.http.message.BasicHeader;
+import org.apache.http.params.HttpParams;
+import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.http.ssl.TrustStrategy;
 import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import javax.annotation.PreDestroy;
+import javax.net.ssl.SSLContext;
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.ByteArrayOutputStream;
@@ -59,16 +71,30 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -83,6 +109,15 @@ public class ClientTicket /*implements ApplicationRunner*/{
     @Autowired
     ClientTicket ct;
 
+    @Autowired
+    ProxyUtil proxyUtil;
+
+    @Autowired
+    AsyncTicketBook asyncTicketBook;
+
+    @Autowired
+    AsyncTicketQuery asyncTicketQuery;
+
 
     @Autowired
     MailUtils mailUtils ;
@@ -90,19 +125,28 @@ public class ClientTicket /*implements ApplicationRunner*/{
     private String rancode = "";
     BasicCookieStore cookieStore = null;
     CloseableHttpClient httpclient = null;
+    RequestConfig requestConfig = null;/*RequestConfig.custom()
+            .setConnectTimeout(3000).setConnectionRequestTimeout(3000)
+            .setSocketTimeout(3000).build();*/
+
     public JsonBinder jsonBinder = JsonBinder.buildNonNullBinder(false);
     private String RAIL_DEVICEID ="";
     private String RAIL_EXPIRATION = "";
 //    private String hosts="121.18.230.86";
     private Map<String,Integer> trainSeatMap = new ConcurrentHashMap<String,Integer>();
     private Map<String,Long> trainSeatTimeMap = new ConcurrentHashMap<String,Long>();
+    public AtomicInteger nullCount = new AtomicInteger(0);
+    public Set<String> ipSet = new HashSet<>();
 
 
-    private String hosts="kyfw.12306.cn";
+    public String hosts="kyfw.12306.cn";
+    public String exserviceHosts="exservice.12306.cn";
+//    public String hosts="112.90.135.94";
     private String leftTicketUrl = "leftTicket/query";
     ScheduledExecutorService es = null;
-    //是否可以运行查票
-    boolean canRun;
+    //是否可以运行查票 用于定时任务
+   volatile boolean canRun;
+    Boolean isReady = false;//用于查看主线程是否运行完毕
 
     public BlockingQueue<Map<String,String>> queue = new LinkedBlockingQueue<Map<String, String>>(10);
 
@@ -121,8 +165,26 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     public ClientTicket() {
         cookieStore = new BasicCookieStore();
+         requestConfig = RequestConfig.custom()
+                .setConnectTimeout(30000).setConnectionRequestTimeout(30000)
+                .setSocketTimeout(30000).build();
+
+        SSLContext sslContext = null;
+            try{
+                sslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy() {
+                // 信任所有
+                @Override
+                public boolean isTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                    return true;
+                }
+            }).build();
+        }catch (Exception e){
+                e.printStackTrace();
+            }
         httpclient = HttpClients.custom()
                 .setDefaultCookieStore(cookieStore)
+                .setSSLContext(sslContext)
+                .setSSLHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER)
                 .build();
         rancode = "";
     }
@@ -134,6 +196,11 @@ public class ClientTicket /*implements ApplicationRunner*/{
     public void setHttpclient(CloseableHttpClient httpclient) {
         this.httpclient = httpclient;
 
+    }
+
+    @PreDestroy
+    public void testDestroy(){
+        logger.info("exit 哈哈");
     }
 
     public Map<String, Integer> getTrainSeatMap() {
@@ -230,13 +297,13 @@ public class ClientTicket /*implements ApplicationRunner*/{
     public void shuapiao(Header[] headers){
         if(null==headers || headers.length==0){
             headers = new Header[3];
-            headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+            headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
             headers[1] = new BasicHeader("Host","kyfw.12306.cn");
         }
         headers = new BasicHeader[7];
-        headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+        headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
         headers[1] = new BasicHeader("Host","kyfw.12306.cn");
-        headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/login/init");
+        headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
         headers[3] = new BasicHeader("Accept","*/*");
         headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
         headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
@@ -288,53 +355,64 @@ public class ClientTicket /*implements ApplicationRunner*/{
         }
     }
 
-    /**
-     * 多线程刷票
-     * @param es1
-     */
-    public void xianchengshuapiao(ScheduledExecutorService es1){
-        for (int i = 0; i < 8; i++) {
-//        while(true){
-            // 刷票线程
-            System.out.println(i+"线程刷票");
-//                es.submit(new TicketQuery(ct.queue));
-            es.schedule(new TicketQuery(queue,ct),300,TimeUnit.MILLISECONDS);
-        }
-    }
 
     public void shutdownqueryThread(){
         ct.canRun =false;
-        es.shutdownNow();
+//        es.shutdownNow();
+    }
+    public void startQueryThread(){
+        ct.canRun = true;
+        for(int i =0;i<10;i++){
+            asyncTicketQuery.run();
+        }
     }
 
-    /**
-     * 预定失败时 重新刷票启动
-     * @param headers
-     */
-    public void reshua( Header[] headers){
+    public void setCookieStore(CloseableHttpResponse httpResponse) {
 
-        this.xianchengshuapiao(es);
-
-        while(this.queue.size()==0){
-            try{
-            Thread.sleep(200);
-            }catch (Exception e){
-                e.printStackTrace();
+        Header[] headers = httpResponse.getHeaders("Set-Cookie");
+        if(null==headers || headers.length==0){
+            return ;
+        }
+        System.out.println("----setCookieStore");
+        for(Header header:headers){
+            String setCookies = header.getValue();
+            String[] cookieArr = setCookies.split(";");
+            String key = cookieArr[0].split("=")[0];
+            String val = cookieArr[0].split("=")[1];
+            BasicClientCookie cookie = new BasicClientCookie(key,val);
+            if(key.equals("JSESSIONID")){
+                //删除已有的JSESSIONID cookie
+                List<Cookie> cookieList = cookieStore.getCookies();
+                Iterator<Cookie> iterator = cookieList.iterator();
+                while ( iterator.hasNext() ) {
+                    Cookie ck = iterator.next();
+                    if(ck.getName().equals("JSESSIONID")){
+                        iterator.remove();
+                    }
+                }
+                Cookie[] cks = new Cookie[cookieList.size()];
+                cookieStore.clear();
+                cookieStore.addCookies(cookieList.toArray(cks));
             }
-        }
-        System.out.println("有票了 开始预订");
-        es.shutdownNow();
-        //订票线程？主程序订票
-        new Thread(new TicketBook(ct,queue,httpclient,headers,cookieStore)).start();
+            for(int i =1;i<cookieArr.length;i++){
+                String key1 = cookieArr[i].split("=")[0];
+                String val1 = cookieArr[i].split("=")[1];
+                if(key1.trim().equalsIgnoreCase("path")){
+                    cookie.setPath(val1);
+                }
+                if(key1.trim().equalsIgnoreCase("domain")){
+                    cookie.setDomain(val1);
+                }
+            }
+            if(null==cookie.getDomain()){
+                cookie.setDomain("kyfw.12306.cn");
+            }
 
-    }
-    public void shutdownqueryThread(ScheduledExecutorService es){
-        try{
-            es.shutdownNow();
-        }catch (Exception e){
-            e.printStackTrace();
+        cookieStore.addCookie(cookie);
         }
+        System.out.println("----setCookie Done-----");
     }
+
 
 
 
@@ -350,10 +428,20 @@ public class ClientTicket /*implements ApplicationRunner*/{
         String codeName = System.currentTimeMillis()+".jpg";
         String imagePath = "";
         String imageBase64="";
+        int valiCount = 1;
         while(StringUtils.isEmpty(imagePath)){
+            if(valiCount>1){
+                try {
+                    logger.info("{}次获取验证码",valiCount);
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
             Map<String,String> rsMap = getCodeByte(url, headers,codeName);
             imagePath = rsMap.get("imagePath");
             imageBase64 = rsMap.get("imageBase64");
+            valiCount++;
         }
         if(CommonUtil.autoCode.equals("1")){
             String rs=ImageUtil.shibie360(imageBase64);
@@ -394,13 +482,14 @@ public class ClientTicket /*implements ApplicationRunner*/{
         byte[] bytse = null;
         Map<String,String> rsMap = new HashMap<String,String>();
         String fileName="";
-            try {
+        CloseableHttpResponse response = null;
+        try {
                 HttpGet hget = new HttpGet("https://"+hosts+"/passport/captcha/captcha-image64?login_site=E&module=login&rand=sjrand&" + Math.random());
                for(Header h:headers){
                    hget.addHeader(h);
                }
 //                CloseableHttpResponse response = httpclient.execute(new HttpGet("https://"+hosts+"/passport/captcha/captcha-image?login_site=E&module=login&rand=sjrand&" + Math.random()));
-                CloseableHttpResponse response = httpclient.execute(hget);
+                response = httpclient.execute(hget);
 
                 HttpEntity entity = response.getEntity();
                 String content = EntityUtils.toString(entity, "UTF-8");
@@ -438,15 +527,31 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
                 EntityUtils.consume(entity); //Consume response content*/
             }catch(Exception e ){
+                rsMap.put("imagePath","");
                e.printStackTrace();
-            }
+            }finally {
+            closeResponse(response);
+        }
             return rsMap;
 
     }
 
-//    public void run(ApplicationArguments var1) throws Exception {
+    public void closeResponse(CloseableHttpResponse response) {
+        try {
+            if (null != response) {
+                response.close();
+            }
+        } catch (Exception e) {
+            logger.error(e);
+        }
+    }
+
+    //    public void run(ApplicationArguments var1) throws Exception {
     public void run() throws Exception {
-        es = Executors.newScheduledThreadPool(CommonUtil.queryNum);
+        if(commonUtil.getUseProxy()==1){
+         new Thread( () -> proxyUtil.getProxyIps() ).start();
+//            proxyUtil.getProxyIps();
+        }
         canRun = false;
         //是否是正常的预定时间
         if(DateUtil.isNormalTime()){
@@ -456,47 +561,25 @@ public class ClientTicket /*implements ApplicationRunner*/{
             return ;
         }
 
-//        CloseableHttpClient httpclient = ct.getHttpclient();
         Header[] headers = new BasicHeader[3];
-        headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+        headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
         headers[1] = new BasicHeader("Host","kyfw.12306.cn");
-        headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
+        headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
 
         try {
             //初始化页面
-
-          /*  HttpUriRequest initPage = RequestBuilder.get()//.post()
-                    .setUri(new URI("https://kyfw.12306.cn/otn/index/init"))
-                    .addHeader(headers[0]).addHeader(headers[1])
-//                    .addParameter("password", "034a58c0a3ed140f656df15303624b13e09085049ad3aea410bc713e5453251d72351fca9c550dfecbdb55b8fbbe00612c1c03ba3254617378fcd6ac7d7c88b357ad3a8c2b26c5658ff118b28f82bcf5cf199d52832596f26ce92a4c1585af5e8ab11d9ad785181aa9d366c38c5899c4cdabf46b63fea19abc1379123057b094")
-//                    .addParameter("username", "dsadmin").addParameter("logintype", "3")
-                    .build();
-            CloseableHttpResponse response2 = httpclient.execute(initPage);
-            try {
-                HttpEntity entity = response2.getEntity();
-                getAllHeaders(response2);
-
-                System.out.println("Login form get: " + response2.getStatusLine());
-                EntityUtils.consume(entity);
-
-                ct.getAllCookies(ct.cookieStore);
-
-            } finally {
-                response2.close();
-            }*/
 
 
             //登陆
             boolean loginFlag=true;
 //            ct.setHosts();
-//            while( ct.login(headers)){
+////            while( ct.login(headers)){
             while( loginFlag){
                 loginFlag= !ct.login(headers);
                 if(!loginFlag){
                     logger.info("登陆成功，继续执行下面代码");
                     break;
                 }
-
             }
 
             //刷票
@@ -507,18 +590,23 @@ public class ClientTicket /*implements ApplicationRunner*/{
                     ct.shuapiao(headers);
                 }
             }).start();*/
-
             ct.queryInit(headers);//设置查询地址 queryA queryZ
             ct.getAllCookies(ct.cookieStore);
 //            ct.getCodeByte(headers);
-            BasicClientCookie acookie = new BasicClientCookie("current_captcha_type", "Z");
-            acookie.setDomain("kyfw.12306.cn");
-            acookie.setPath("/");
-            cookieStore.addCookie(acookie);
-            ct.getAllCookies(ct.cookieStore);
-            ct.xianchengshuapiao(es);
+            AddCaptchaCookie();
+            for(int i =0;i<10;i++){
+                asyncTicketQuery.run();
+            }
+//            ct.xianchengshuapiao(es);
             //订票线程？主程序订票
-            new Thread(new TicketBook(ct,queue,ct.getHttpclient(),headers,cookieStore)).start();
+            if(commonUtil.getAutoSub().equals("1")){
+//                new Thread(new AutoTicketBook(ct,queue,ct.getHttpclient(),headers,cookieStore)).start();
+                for(int i = 0;i<10;i++){
+                    asyncTicketBook.run();
+                }
+            }else{
+                new Thread(new TicketBook(ct,queue,ct.getHttpclient(),headers,cookieStore)).start();
+            }
            /* while(ct.queue.size()==0){
                 Thread.sleep(200);
             }
@@ -549,7 +637,8 @@ public class ClientTicket /*implements ApplicationRunner*/{
             }*/
 
 
-
+            CountDownLatch latch = new CountDownLatch(1);
+            latch.await();
           /*  while(true){
                 Thread.sleep(1000);
             }*/
@@ -559,6 +648,15 @@ public class ClientTicket /*implements ApplicationRunner*/{
         }finally {
 //            httpclient.close();
         }
+    }
+
+    public void AddCaptchaCookie() {
+        BasicClientCookie acookie = new BasicClientCookie("current_captcha_type", "Z");
+//        acookie.setDomain("kyfw.12306.cn");
+        acookie.setDomain(hosts);
+        acookie.setPath("/");
+        cookieStore.addCookie(acookie);
+        ct.getAllCookies(ct.cookieStore);
     }
 
     /**
@@ -583,12 +681,78 @@ public class ClientTicket /*implements ApplicationRunner*/{
         this.rancode = "";
     }
 
-    public boolean login(Header[] headers){
+    public Map<String,Object> conf(Header[] headers){
+//        headers[1] = new BasicHeader("Host","kyfw.12306.cn");
+//        headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
+        Map<String,Object> confMap = new HashMap<String,Object>();
+//        Header contentType = new BasicHeader("Host","kyfw.12306.cn");
+        Header contentLen = new BasicHeader("Content-Length","0");
+        CloseableHttpResponse responseConf = null;
         try {
+            String url = headers[1].getValue().equalsIgnoreCase("www.12306.cn")?"/index/otn/login/conf":"/otn/login/conf";
+            logger.info("header2:{}",headers[2].getValue());
+            HttpUriRequest conf = RequestBuilder.post()
+                    .setUri(new URI("https://"+this.hosts+url))
+                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
+                    .addHeader(contentLen)
+                    .build();
+            responseConf = httpclient.execute(conf);
+            setCookieStore(responseConf);
+            HttpEntity entity = responseConf.getEntity();
+            String jsonStr= EntityUtils.toString(entity);
+            logger.info("conf entity:{}",jsonStr);
+            confMap = jsonBinder.fromJson(jsonStr,Map.class);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }finally {
+            closeResponse(responseConf);
+        }
+        return confMap;
+    }
+    public Map<String,Object> uamtkStatic(Header[] headers){
+        headers[1] = new BasicHeader("Host","kyfw.12306.cn");
+        headers[2] = new BasicHeader("Referer"," https://www.12306.cn/index/");
+        Header headerOrigin = new BasicHeader("Origin","https://www.12306.cn");
+        Map<String,Object> uamtkStaticMap = new HashMap<String,Object>();
+        CloseableHttpResponse uamtkResponse = null;
+        try {
+            HttpUriRequest uamtkStatic = RequestBuilder.post()
+                    .setUri(new URI("https://"+this.hosts+"/passport/web/auth/uamtk-static"))
+                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
+                    .addParameter("appid","otn")
+                    .build();
+            uamtkResponse = httpclient.execute(uamtkStatic);
+            HttpEntity entity = uamtkResponse.getEntity();
+            String jsonStr= EntityUtils.toString(entity);
+            logger.info("uamtkStatic entity:{}",jsonStr);
+            uamtkStaticMap = jsonBinder.fromJson(jsonStr,Map.class);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }finally {
+            closeResponse(uamtkResponse);
+        }
+        return uamtkStaticMap;
+    }
+
+    public boolean login(Header[] headers) {
+        try {
+            if (null == headers || headers.length == 0) {
+                headers = new BasicHeader[3];
+                headers[0] = new BasicHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
+                headers[1] = new BasicHeader("Host", "kyfw.12306.cn");
+                headers[2] = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/resources/login.html");
+            }
+            headers[1] = new BasicHeader("Host", "www.12306.cn");
+            headers[2] = new BasicHeader("Referer", "https://www.12306.cn/index/index.html");
+            getIndex(headers);
+//            conf(headers);
+            //设置多余的cookie
+            headers[1] = new BasicHeader("Host", "kyfw.12306.cn");
+            ct.getDeviceCookie(headers);
             logger.info("init page");
-            headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
+            headers[2] = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/resources/login.html");
             HttpUriRequest initPage1 = RequestBuilder.get()//.post()
-                    .setUri(new URI("https://"+this.hosts+"/otn/login/init"))
+                    .setUri(new URI("https://" + this.hosts + "/otn/resources/login.html"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
                     .build();
             CloseableHttpResponse response3 = httpclient.execute(initPage1);
@@ -596,160 +760,173 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 HttpEntity entity = response3.getEntity();
 
                 EntityUtils.consume(entity);
+            } finally {
+                response3.close();
+            }
+            headers[1] = new BasicHeader("Host", "kyfw.12306.cn");
+            headers[2] = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/resources/login.html");
 
 
-        } finally {
-            response3.close();
-        }
-            headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/login/init");
-            logger.info("page inited and start to readFile2Cookie ");
+            this.getAllCookies(this.cookieStore);
+        /*    logger.info("page inited and start to readFile2Cookie ");
             //设置一遍cookie
             readFile2Cookie();
-            logger.info("check online status");
+            logger.info("check online status");*/
             //验证登陆状态
-            Map<String,Object> onlineMap = this.checkOnlineStatus(headers);
-            if(null!=onlineMap && onlineMap.size()>0){
-                if("0".equalsIgnoreCase(onlineMap.get("result_code")+"")){
+            Map<String, Object> confMap = this.conf(headers);
+            logger.info("conf result:{}", confMap);
+            getLogInBanner(headers);
+            Map<String, Object> onlineMap = this.uamtkStatic(headers);//this.checkOnlineStatus(headers);
+            if (null != onlineMap && onlineMap.size() > 0) {
+                if ("0".equalsIgnoreCase(onlineMap.get("result_code") + "")) {
                     logger.info("验证时候已经登陆");
                     return true;
-                }else{
+                } else {
                     logger.info("验证时候未登录");
                 }
             }
-            //设置多余的cookie
-//            ct.getDeviceCookie(headers);
-            boolean checkedCode=false;
-            while(!checkedCode) {
-
-                //获取验证码
-                String valicode = "";
-                while(valicode.equals("")){
-                    valicode = this.getCode("", headers);
-                }
-
-                System.out.println("验证码：" + valicode);
-
-                logger.info("start check code");
-                //校验验证码
-                HttpUriRequest checkCode = RequestBuilder.post()
-                        .setUri(new URI("https://" + this.hosts + "/passport/captcha/captcha-check"))
-                        .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
-                        .addParameter("answer", valicode)
-                        .addParameter("login_site", "E")
-                        .addParameter("rand", "sjrand")
-                        .build();
-                CloseableHttpResponse response = httpclient.execute(checkCode);
-                this.getAllCookies(this.cookieStore);
-
-                Map<String, String> rsmap = null;
-                try {
-                    HttpEntity entity = response.getEntity();
-                    rsmap = this.jsonBinder.fromJson(EntityUtils.toString(entity), Map.class);
-//                System.out.println("校验：" + response.getStatusLine().getStatusCode() + " " + entity.getContent() + " abc " + EntityUtils.toString(entity));
-                    if(null==rsmap){
-                        System.out.println("验证码校验没有通过111");
-                    }else  if (rsmap.get("result_code").equalsIgnoreCase("4")) {
-                        logger.info("验证码校验通过");
-                        checkedCode=true;
-                    } else {
-                        logger.info("验证码校验没有通过");
-                    }
-                } catch (Exception e) {
-                    logger.info("验证码校验没有通过");
-                    e.printStackTrace();
-                } finally {
-                    response.close();
-                }
-            }
-
-
-            //登陆
-            Map<String,String> map = new HashMap<String,String>();
-
-            try {
-                logger.info("start login");
-                Thread.sleep(400);
+            CloseableHttpResponse response = null;
+            if (commonUtil.getLogonType().equals("1")) {
+                boolean flag = loginQr(headers);
+                //防止出现越界
                 headers = new BasicHeader[7];
-                headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
-                headers[1] = new BasicHeader("Host","kyfw.12306.cn");
-                headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/login/init");
+                headers[0] = new BasicHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
+                headers[1] = new BasicHeader("Host", "kyfw.12306.cn");
+                headers[2] = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/resources/login.html");
                 //headers[3] = new BasicHeader("Accept","application/json, text/javascript, */*; q=0.01");
-                headers[3] = new BasicHeader("Accept","*/*");
-                headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
-                headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
-                headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded");
-                HttpUriRequest login = RequestBuilder.post()
-                        .setUri("https://"+this.hosts+"/passport/web/login")
-                        //.setUri(new URI("https://kyfw.12306.cn/passport/web/login"))
-                        .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                        .addParameter("username", commonUtil.getUserName())
-                        .addParameter("password", commonUtil.getUserPwd())
-                        .addParameter("appid", "otn")
-                        .build();
-                login.addHeader("X-Requested-With","XMLHttpRequest");
-                login.addHeader("Connection","keep-alive");
-                CloseableHttpResponse response = httpclient.execute(login);
-                Thread.sleep(400);
+                headers[3] = new BasicHeader("Accept", "application/json, text/javascript, */*; q=0.01");
+                headers[4] = new BasicHeader("Accept-Encoding", "gzip, deflate, br");
+                headers[5] = new BasicHeader("Accept-Language", "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2");
+                headers[6] = new BasicHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+            } else {
+                boolean checkedCode = false;
+                String valicode = "";
+                while (!checkedCode) {
 
-                HttpEntity entity = response.getEntity();
-//                Map<String, String> rsmap = null;
-                Map<String, String> rsmap = this.jsonBinder.fromJson(EntityUtils.toString(entity), Map.class);
-//                this.getAllCookies(this.cookieStore);
-                //            System.out.println("登陆：" + response.getStatusLine().getStatusCode() + " " + entity.getContent() + " abc " + EntityUtils.toString(entity));
-                if(null!=rsmap && rsmap.size()>0){
-                    String code = String.valueOf(rsmap.get("result_code"))+"";
-                    if (code.equalsIgnoreCase("0")) {
-                        logger.info("登陆成功");
+                    //获取验证码
+                    valicode = "";
+                    int valiCount = 1;
+                    while (valicode.equals("")) {
+                   /* if(valiCount>1){
+                        Thread.sleep(2000);
+                    }*/
+                        valicode = this.getCode("", headers);
+                        valiCount++;
+                    }
 
-                        HttpUriRequest userLogin = RequestBuilder.post()
-                                .setUri("https://"+this.hosts+"/otn/login/userLogin")
-                                .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                                .addParameter("_json_att", "")
-                                .build();
-                        login.addHeader("X-Requested-With","XMLHttpRequest");
-                        login.addHeader("Connection","keep-alive");
-                        response = httpclient.execute(login);
-                        int statusCode = response.getStatusLine().getStatusCode();
-                        logger.info("再次登陆userLogin："+ response.getStatusLine().getStatusCode());
-                        if(statusCode==302){
-                            EntityUtils.consume(response.getEntity());
-                            HttpUriRequest reload = RequestBuilder.get()//.post()
-                                    .setUri("https://"+this.hosts+"/otn/passport?redirect=/otn/login/userLogin")
-                                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                                    .build();
+                    System.out.println("验证码：" + valicode);
 
-                            response = httpclient.execute(reload);
-                            statusCode = response.getStatusLine().getStatusCode();
-                            System.out.println("跳转："+ response.getStatusLine().getStatusCode());
-                            EntityUtils.consume(response.getEntity());//消费掉
+                    logger.info("start check code");
+                    //校验验证码
+                    HttpUriRequest checkCode = RequestBuilder.post()
+                            .setUri(new URI("https://" + this.hosts + "/passport/captcha/captcha-check"))
+                            .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
+                            .addParameter("answer", valicode)
+                            .addParameter("login_site", "E")
+                            .addParameter("rand", "sjrand")
+                            .addParameter("_", "" + (new Date()).getTime())
+                            .build();
+                    response = httpclient.execute(checkCode);
+                    this.getAllCookies(this.cookieStore);
+
+                    Map<String, String> rsmap = null;
+                    try {
+                        HttpEntity entity = response.getEntity();
+                        rsmap = this.jsonBinder.fromJson(EntityUtils.toString(entity), Map.class);
+//                System.out.println("校验：" + response.getStatusLine().getStatusCode() + " " + entity.getContent() + " abc " + EntityUtils.toString(entity));
+                        if (null == rsmap) {
+                            System.out.println("验证码校验没有通过111");
+                        } else if (rsmap.get("result_code").equalsIgnoreCase("4")) {
+                            logger.info("验证码校验通过");
+                            checkedCode = true;
+                            break;
+                        } else {
+                            logger.info("验证码校验没有通过1");
                         }
+                    } catch (Exception e) {
+                        logger.info("验证码校验没有通过2");
+                        e.printStackTrace();
+                    } finally {
+                        response.close();
+                    }
+                    logger.info("2秒后重新拉取验证码");
+                    Thread.sleep(2000);
+                }
 
 
+                //登陆
+                Map<String, String> map = new HashMap<String, String>();
 
+                try {
+                    logger.info("start login");
+//                valicode = "127,30";
+//                Thread.sleep(400);
+                    headers = new BasicHeader[7];
+                    headers[0] = new BasicHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
+                    headers[1] = new BasicHeader("Host", "kyfw.12306.cn");
+                    headers[2] = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/resources/login.html");
+                    //headers[3] = new BasicHeader("Accept","application/json, text/javascript, */*; q=0.01");
+                    headers[3] = new BasicHeader("Accept", "application/json, text/javascript, */*; q=0.01");
+                    headers[4] = new BasicHeader("Accept-Encoding", "gzip, deflate, br");
+                    headers[5] = new BasicHeader("Accept-Language", "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2");
+                    headers[6] = new BasicHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                    Header headerConn = new BasicHeader("Connection", "keep-alive");
+                    HttpUriRequest login = RequestBuilder.post()
+                            .setUri("https://" + this.hosts + "/passport/web/login")
+                            //.setUri(new URI("https://kyfw.12306.cn/passport/web/login"))
+                            .addHeader(headers[0]).addHeader(headers[1]).
+                                    addHeader(headers[2]).
+                                    addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
+//                        .addHeader(headerOrigin)
+                            .addHeader(headerConn)
+//                        .addHeader(headerLength)
+                            .addParameter("username", commonUtil.getUserName())
+                            .addParameter("password", commonUtil.getUserPwd())
+                            .addParameter("appid", "otn")
+                            .addParameter("answer", URLEncoder.encode(valicode, "utf-8"))
+//                        .addParameter("answer", valicode)
+                            .build();
+                    login.addHeader("X-Requested-With", "XMLHttpRequest");
+//                login.addHeader("Connection","keep-alive");
+                    this.getAllCookies(this.cookieStore);
+                    logger.info(login.getFirstHeader("Content-Length"));
+//                Thread.sleep(400);
+                    response = httpclient.execute(login);
+                    logger.info("login status:{}", response.getStatusLine().getStatusCode());
+                    HttpEntity entity = response.getEntity();
+                    Map<String, String> rsmap = this.jsonBinder.fromJson(EntityUtils.toString(entity), Map.class);
+                    if (null != rsmap && rsmap.size() > 0) {
+                        String code = String.valueOf(rsmap.get("result_code")) + "";
+                        if (code.equalsIgnoreCase("0")) {
+                            logger.info("登陆成功");
+
+                        } else {
+                            System.out.println("登陆失败");
+                            return false;
+                        }
                     } else {
-                        System.out.println("登陆失败");
+                        System.out.println("登陆失败，发生了302，被禁了？");
                         return false;
                     }
-                }else {
-                    System.out.println("登陆失败，发生了302，被禁了？");
-                    return false;
-                }
 
-            }catch (Exception e){
-                e.printStackTrace();
-                System.out.println("登陆时发生错误");
-                return false;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    System.out.println("登陆时发生错误");
+                    return false;
+                } finally {
+                    closeResponse(response);
+                }
             }
             logger.info("check online status again");
             //再次校验登陆状态
             onlineMap = this.checkOnlineStatus(headers);
-            String tk ="";
-            if(null!=onlineMap && onlineMap.size()>0){
-                if("0".equals(onlineMap.get("result_code")+"")){
+            String tk = "";
+            if (null != onlineMap && onlineMap.size() > 0) {
+                if ("0".equals(onlineMap.get("result_code") + "")) {
                     logger.info("再次验证时候已经登陆");
-                    tk =onlineMap.get("newapptk").toString();
+                    tk = onlineMap.get("newapptk").toString();
 
-                }else{
+                } else {
                     System.out.println("再次验证时候未登录,重新登录");
                     return false;
                 }
@@ -758,62 +935,125 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
             logger.info("start check client and get tk");
             //校验客户端
+            try {
+                headers[1] = new BasicHeader("Host", "kyfw.12306.cn");
+                Header headerReffer = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/passport?redirect=/otn/login/userLogin");
+                HttpUriRequest uamauthclient = RequestBuilder.post()
+                        .setUri("https://" + this.hosts + "/otn/uamauthclient")
+                        .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
+                        .addHeader(headerReffer)
+                        .addParameter("tk", tk)
+                        .build();
+                uamauthclient.addHeader("X-Requested-With", "XMLHttpRequest");
+                uamauthclient.addHeader("Connection", "keep-alive");
+                response = httpclient.execute(uamauthclient);
+                int statusCode = response.getStatusLine().getStatusCode();
+                if (statusCode == 200) {
+                    HttpEntity entity = response.getEntity();
 
-            HttpUriRequest uamauthclient = RequestBuilder.post()
-                    .setUri("https://"+this.hosts+"/otn/uamauthclient")
-                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                    .addParameter("tk", tk)
-                    .build();
-            uamauthclient.addHeader("X-Requested-With","XMLHttpRequest");
-            uamauthclient.addHeader("Connection","keep-alive");
-            CloseableHttpResponse response = httpclient.execute(uamauthclient);
-            int statusCode = response.getStatusLine().getStatusCode();
-            if(statusCode==200){
-                HttpEntity entity = response.getEntity();
 
-
-                String jsonStr= EntityUtils.toString(entity);
-                System.out.println("entity " +jsonStr);
-                map = this.jsonBinder.fromJson(jsonStr,Map.class);
-                logger.info("校验通过：{}",map.get("username"));
-                logger.info("cookie中是否有tk参数");
-                this.getAllCookies(this.cookieStore);
-                logger.info("tk cookie获取结束");
-                HttpUriRequest userLogin = RequestBuilder.get()
-                        .setUri("https://"+this.hosts+"/otn/login/userLogin")
+                    String jsonStr = EntityUtils.toString(entity);
+                    System.out.println("entity " + jsonStr);
+                    Map<String, String> map = this.jsonBinder.fromJson(jsonStr, Map.class);
+                    logger.info("校验通过：{}", map.get("username"));
+                    logger.info("cookie中是否有tk参数");
+                    this.getAllCookies(this.cookieStore);
+                    logger.info("tk cookie获取结束");
+//                closeResponse(response);
+                    //校验
+                /*HttpUriRequest userLogin = RequestBuilder.get()
+                        .setUri("https://" + this.hosts + "/otn/login/userLogin")
                         .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                         .build();
-                userLogin.addHeader("X-Requested-With","XMLHttpRequest");
-                userLogin.addHeader("Connection","keep-alive");
+                userLogin.addHeader("X-Requested-With", "XMLHttpRequest");
+                userLogin.addHeader("Connection", "keep-alive");
                 response = httpclient.execute(userLogin);
                 statusCode = response.getStatusLine().getStatusCode();
-                logger.info("userLogin statusCode:{}",statusCode);
+                logger.info("userLogin statusCode:{}", statusCode);
                 EntityUtils.consume(response.getEntity());
-
+//                closeResponse(response);
                 //跳转到 用户页面
 
                 HttpUriRequest initMy12306 = RequestBuilder.get()
-                        .setUri("https://"+this.hosts+"/otn/index/initMy12306")
+                        .setUri("https://" + this.hosts + "/otn/index/initMy12306")
                         .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                         .build();
-                initMy12306.addHeader("X-Requested-With","XMLHttpRequest");
-                initMy12306.addHeader("Connection","keep-alive");
+                initMy12306.addHeader("X-Requested-With", "XMLHttpRequest");
+                initMy12306.addHeader("Connection", "keep-alive");
                 response = httpclient.execute(initMy12306);
                 statusCode = response.getStatusLine().getStatusCode();
-                logger.info("initMy12306 statusCode:{}",statusCode);
-                EntityUtils.consume(response.getEntity());
+                logger.info("initMy12306 statusCode:{}", statusCode);
+                EntityUtils.consume(response.getEntity());*/
 
-                logger.info("用户登录成功");
-                //将成功的cookie写入文件
-                writeCookies2File();
-                return true;
+                    logger.info("用户登录成功");
+                    //将成功的cookie写入文件
+                    writeCookies2File();
+                    isReady = true;
+                    return true;
 
+                }
+            } finally {
+                closeResponse(response);
             }
 
-        }catch (Exception e){
-            logger.error("登陆时发生错误",e);
+        } catch (Exception e) {
+            logger.error("登陆时发生错误", e);
         }
         return false;
+    }
+
+    private void getIndex(Header[] headers){
+
+        CloseableHttpResponse response2 = null;
+        try {
+            Header header = new BasicHeader("Host","www.12306.cn");
+            HttpUriRequest getindex = RequestBuilder.get()
+                    .setUri("https://www.12306.cn/index/index.html")
+                    .addHeader(header).addHeader(headers[0])
+                    .build();
+            response2 = httpclient.execute(getindex);
+            HttpEntity entity = response2.getEntity();
+            EntityUtils.consume(entity);
+        }catch (Exception e){
+            e.printStackTrace();
+        }finally {
+            if(null!=response2){
+                try{
+                    response2.close();
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private void getLogInBanner(Header[] headers){
+
+        CloseableHttpResponse response2 = null;
+        try {
+            HttpUriRequest loginBanner = RequestBuilder.get()
+                    .setUri("https://"+this.hosts+"/otn/index12306/getLoginBanner")
+                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
+                    .build();
+            response2 = httpclient.execute(loginBanner);
+            setCookieStore(response2);
+            HttpEntity entity = response2.getEntity();
+            String jsonStr = EntityUtils.toString(entity);
+            System.out.println("entity " + jsonStr);
+            Map<String,String> map = this.jsonBinder.fromJson(jsonStr, Map.class);
+            logger.info("getLogInBanner result:{}",map);
+//            EntityUtils.consume(entity);
+        }catch (Exception e){
+            e.printStackTrace();
+        }finally {
+            if(null!=response2){
+                try{
+                    response2.close();
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     /**
@@ -821,18 +1061,27 @@ public class ClientTicket /*implements ApplicationRunner*/{
      * @param headers
      */
     private void getDeviceCookie(Header[] headers){
-        HttpUriRequest getDevice = RequestBuilder.get()//.post()
-                .setUri("https://"+hosts+"/otn/HttpZF/logdevice?algID=iExnZxdyh4&hashCode=2EgNFh3Z_s7TjiwZrAbzjkVg8aGr2ty5y-CTVyrFUM8&FMQw=0&q4f3=zh-CN&VySQ=FGF4f4vSNpAHLEk8PaI2MM-cyFVlF53-&VPIf=1&custID=133&VEek=unknown&dzuS=0&yD16=0&EOQP=5898b2e342e89ecdecb05e6531359f3d&lEnu=3232238122&jp76=4135096c30ba4dbfda5c27ac46d91938&hAqN=Win32&platform=WEB&ks0Q=b9a555dce60346a48de933b3e16ebd6e&TeRS=1040x1920&tOHY=24xx1080x1920&Fvje=i1l1o1s1&q5aJ=-8&wNLf=99115dfb07133750ba677d055874de87&0aew=Mozilla/5.0%20(Windows%20NT%2010.0;%20Win64;%20x64)%20AppleWebKit/537.36%20(KHTML,%20like%20Gecko)%20Chrome/63.0.3239.132%20Safari/537.36&E3gR=af9ced95817938a0d8f7d89f50a47765&timestamp="+(new Date()).getTime())
-                .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
-                .build();
+
         CloseableHttpResponse response2 = null;//httpclient.execute(getDevice);
         try {
+            logger.info("用到的header：{}",headers[0].getValue());
+            Header headerHost = new BasicHeader("Host","kyfw.12306.cn");
+            String params = "algID=stlPYD4gpV&hashCode=pAsqygwgJFux1ohtGryn1E84twryYmobdaQj6QLm4Ss&FMQw=1&q4f3=zh-CN&VySQ=FGGELzCLkZ3be5N_q7iX4OwsdRYoVSq0&VPIf=1&custID=133&VEek=unspecified&dzuS=0&yD16=0&EOQP=13c246fe6c83ce181f4fd5e79c60a4ff&lEnu=168107667&jp76=d41d8cd98f00b204e9800998ecf8427e&hAqN=Win32&platform=WEB&ks0Q=d41d8cd98f00b204e9800998ecf8427e&TeRS=728x1366&tOHY=24xx768x1366&Fvje=i1l1s1&q5aJ=-8&wNLf=99115dfb07133750ba677d055874de87&0aew=%s&E3gR=500781a8a6be6202627e398a65b7e48e&timestamp=%s";
+            params = String.format(params,URLEncoder.encode(headers[0].getValue(),"utf-8"),(new Date()).getTime() );
+            logger.info("获取设备信息："+params);
+            HttpUriRequest getDevice = RequestBuilder.get()//.post()
+                    .setUri("https://"+hosts+"/otn/HttpZF/logdevice?"+ params)
+                    .addHeader(headerHost).addHeader(headers[1]).addHeader(headers[2])
+                    .build();
             response2 = httpclient.execute(getDevice);
             HttpEntity entity = response2.getEntity();
             getAllHeaders(response2);
 
-
-            System.out.println("Login form get: " + response2.getStatusLine());
+            Calendar calendar1 = Calendar.getInstance();
+            SimpleDateFormat sdf1 = new SimpleDateFormat("yyyyMMdd");
+            calendar1.add(Calendar.DATE, 1000);
+            calendar1.add(Calendar.HOUR,-8);
+            System.out.println("getDeviceCookie get: " + response2.getStatusLine());
             String jsonStr= EntityUtils.toString(entity);
             jsonStr=jsonStr.replace("callbackFunction('","").replace("')","");
             System.out.println("entity " +jsonStr);
@@ -841,13 +1090,17 @@ public class ClientTicket /*implements ApplicationRunner*/{
             System.out.println("Login form get: " +map);
             RAIL_DEVICEID = map.get("dfp");
             BasicClientCookie acookie = new BasicClientCookie("RAIL_DEVICEID", map.get("dfp"));
-            acookie.setDomain(".12306.cn");
+//            acookie.setDomain(".12306.cn");
+            acookie.setDomain("kyfw.12306.cn");
             acookie.setPath("/");
+//            acookie.setExpiryDate( calendar1.getTime());
             cookieStore.addCookie(acookie);
             BasicClientCookie bcookie = new BasicClientCookie("RAIL_EXPIRATION", map.get("exp"));
             RAIL_EXPIRATION =  map.get("exp");
-            bcookie.setDomain(".12306.cn");
+//            bcookie.setDomain(".12306.cn");
+            bcookie.setDomain("kyfw.12306.cn");
             bcookie.setPath("/");
+//            bcookie.setExpiryDate(calendar1.getTime());
             cookieStore.addCookie(bcookie);
 
 //            getAllCookies(cookieStore);
@@ -867,17 +1120,36 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     public Map<String,Object> checkOnlineStatus(Header[] headers){
         Map<String,Object> map = new HashMap<String,Object>();
+        if(null== headers){
+            headers = new Header[3];
+            headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
+            headers[1] = new BasicHeader("Host","kyfw.12306.cn");
+            headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
+        }
+//        Header headerOrigin = new BasicHeader("Origin","https://exservice.12306.cn");
+        Header headerReffer = new BasicHeader("Referer","https://kyfw.12306.cn/otn/passport?redirect=/otn/login/userLogin");
         HttpUriRequest getDevice = RequestBuilder.post()
                 .setUri("https://"+hosts+"/passport/web/auth/uamtk")
-                .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
+                .addHeader(headers[0]).addHeader(headers[1])
+                .addHeader(headerReffer)
+//                .addHeader(headerOrigin)
+//                .addParameter("appid","otn")
                 .addParameter("appid","otn")
+                .setConfig(requestConfig)
                 .build();
-        for(Header h:headers){
+       /* for(Header h:headers){
             getDevice.addHeader(h);
+        }*/
+       Header[] h= getDevice.getAllHeaders();
+        for(Header h1:h){
+            System.out.println("fffffffffffffffff"+h1);
         }
         CloseableHttpResponse response2 = null;//httpclient.execute(getDevice);
         try {
+            logger.info("===================start check ");
+            ct.getAllCookies(ct.cookieStore);
             response2 = httpclient.execute(getDevice);
+            logger.info("=================== check  ended ");
             HttpEntity entity = response2.getEntity();
 
 
@@ -886,7 +1158,8 @@ public class ClientTicket /*implements ApplicationRunner*/{
             map = jsonBinder.fromJson(jsonStr,Map.class);
 
         }catch (Exception e){
-            e.printStackTrace();
+            logger.error("判断在线状态时出错",e);
+//            e.printStackTrace();
         }finally {
             if(null!=response2){
                 try{
@@ -904,26 +1177,28 @@ public class ClientTicket /*implements ApplicationRunner*/{
         mailUtils.send(msg);
     }
 
-    public String queryInit(Header[] headers){
+    public synchronized String queryInit(Header[] headers){
             CloseableHttpResponse response=null;
             String queryUrl ="";
             String responseBody = "";
             try{
-                if(headers.length<7){
+                if(null== headers || headers.length<7){
                     headers = new BasicHeader[7];
-                    headers[0] = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+                    headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
                     headers[1] = new BasicHeader("Host","kyfw.12306.cn");
-                    headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/login/init");
+                    headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
                     headers[3] = new BasicHeader("Accept","*/*");
                     headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
                     headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
                     headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded");
                 }
-                headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/index/init");
-                HttpUriRequest confirm = RequestBuilder.post()
-                        .setUri(new URI("https://kyfw.12306.cn/otn/leftTicket/init"))
-                        .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                        .addParameter("_json_att", "")
+                headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
+                HttpUriRequest confirm = RequestBuilder.get()
+//                        .setUri(new URI("https://kyfw.12306.cn/otn/leftTicket/init"))
+                        .setUri(new URI("https://"+hosts+"/otn/leftTicket/init"))
+                        .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5])
+//                        .addParameter("_json_att", "")
+                        .addParameter("linktypeid", "dc")
                         .build();
                 response = httpclient.execute(confirm);
 
@@ -958,23 +1233,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     }
 
-   /* public void getCodeByte(Header[] headers) {
-        byte[] bytse = null;
-        try {
-            HttpGet hget = new HttpGet("https://kyfw.12306.cn/otn/passcodeNew/getPassCodeNew?module=passenger&rand=randp&" + Math.random());
-            for(Header h:headers){
-                hget.addHeader(h);
-            }
-            CloseableHttpResponse response = httpclient.execute(hget);
-
-            HttpEntity entity = response.getEntity();
-            bytse=  EntityUtils.toByteArray(entity);
-            EntityUtils.consume(entity); //Consume response content
-        }catch(Exception e ){
-            e.printStackTrace();
-        }
-
-    }*/
 
     public void resetCookieStore(){
 //        cookieStore = new BasicCookieStore();
@@ -984,6 +1242,155 @@ public class ClientTicket /*implements ApplicationRunner*/{
 //                .build();
 //        ct.cookieStore = cookieStore;
 //        ct.httpclient = httpclient;
+    }
+
+    public boolean loginQr(Header[] headers){
+        boolean flag =false;
+        Map<String,Object> qrMap = createQr(headers);
+
+        if(qrMap.size()>0){
+            //获取登录二维码
+            String status =  StringUtils.isEmpty(qrMap.get("result_code"))?"":String.valueOf(qrMap.get("result_code"));
+            if(status.equals("0")){
+                String image = StringUtils.isEmpty(qrMap.get("image"))?"":String.valueOf(qrMap.get("image"));
+                String uuid = StringUtils.isEmpty(qrMap.get("uuid"))?"":String.valueOf(qrMap.get("uuid"));
+                //生成二维码弹窗
+                JDialog dialog = new JDialog();
+                ExecutorService singleThreadExecutor = Executors.newSingleThreadExecutor();
+                for (int i = 0; i < 1; i++) {
+                    singleThreadExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                logger.info("8888888888888888888888888888");
+                                genereteQr(dialog,image);
+                                logger.info("99999999999999999999999999999999");
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    });
+                }
+                        //校验二维码是否已登录
+                String  result_code = "";
+                String uamtk = "";
+                while(!result_code.equals("2")){
+                    Map<String,Object> checkQrMap = checkQr(headers,image,uuid);
+                        result_code =  StringUtils.isEmpty(checkQrMap.get("result_code"))?"":String.valueOf(checkQrMap.get("result_code"));
+                        uamtk =  StringUtils.isEmpty(checkQrMap.get("uamtk"))?"":String.valueOf(checkQrMap.get("uamtk"));
+                    if(!result_code.equals("2")){
+                        try {
+                            Thread.sleep(500L);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }else{
+                        dialog.setVisible(false);
+                        dialog.dispose();
+                    }
+                }
+                flag = true;
+                logger.info("二维码登录之后。。。。。。。。。。。。。。。。。。。");
+                getAllCookies(this.cookieStore);
+            }
+        }
+        return flag;
+    }
+
+    public void genereteQr(JDialog dialog,String image){
+        String codeName = System.currentTimeMillis()+".jpg";
+        String savePath=CommonUtil.sessionPath+CommonUtil.codePath;
+        File sf=new File(savePath);
+        if(!sf.exists()){
+            sf.mkdirs();
+        }
+        ImageUtil.GenerateImage(image,savePath+File.separator+codeName);
+        String fileName = savePath+File.separator+codeName;
+        JLabel label = new JLabel(new ImageIcon(fileName),
+                JLabel.CENTER);
+
+        label.setBounds(0, 0, 200, 200);
+        label.setVerticalAlignment(SwingConstants.TOP);
+        dialog.setBounds(0,10,300,300);
+        dialog.add(label);
+        dialog.setModal(true);
+        int x = (Toolkit.getDefaultToolkit().getScreenSize().width - dialog.getSize().width)/2;
+        int y = (Toolkit.getDefaultToolkit().getScreenSize().height - dialog.getSize().height)/2;
+        dialog.setLocation(x,y);
+        dialog.setVisible(true);
+//        label.addMouseListener(new RecordListener());
+       /* Container container = dialog.getContentPane();
+        dialog.setAlwaysOnTop(true);
+//        container.setLayout(null);
+        container.add(label);
+        container.setVisible(true);*/
+
+        /*JOptionPane.showConfirmDialog(null, label,
+                "请输入验证码", JOptionPane.DEFAULT_OPTION);*/
+
+    }
+
+    public Map<String,Object> createQr(Header[] headers){
+        Map<String,Object> map = new HashMap<String,Object>();
+        if(null== headers || headers.length<3){
+            headers = new Header[3];
+            headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
+            headers[1] = new BasicHeader("Host","kyfw.12306.cn");
+            headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
+        }
+        HttpUriRequest createQr = RequestBuilder.post()
+                .setUri("https://"+hosts+"/passport/web/create-qr64")
+                .addHeader(headers[0]).addHeader(headers[1])
+                .addHeader(headers[2])
+                .addParameter("appid","otn")
+                .setConfig(requestConfig)
+                .build();
+        CloseableHttpResponse response2 = null;
+        try {
+            response2 = httpclient.execute(createQr);
+            HttpEntity entity = response2.getEntity();
+            String jsonStr= EntityUtils.toString(entity);
+            map = jsonBinder.fromJson(jsonStr,Map.class);
+
+        }catch (Exception e){
+            logger.error("生成二维码时出错",e);
+        }finally {
+            closeResponse(response2);
+        }
+
+        return map;
+    }
+
+    public Map<String,Object> checkQr(Header[] headers,String image,String uuid){
+        Map<String,Object> map = new HashMap<String,Object>();
+        if(null== headers || headers.length<3){
+            headers = new Header[3];
+            headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
+            headers[1] = new BasicHeader("Host","kyfw.12306.cn");
+            headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
+        }
+        HttpUriRequest checkQr = RequestBuilder.post()
+                .setUri("https://"+hosts+"/passport/web/checkqr")
+                .addHeader(headers[0]).addHeader(headers[1])
+                .addHeader(headers[2])
+                .addParameter("appid","otn")
+                .addParameter("uuid",uuid)
+                .setConfig(requestConfig)
+                .build();
+        CloseableHttpResponse response = null;
+        try {
+            response = httpclient.execute(checkQr);
+            HttpEntity entity = response.getEntity();
+            String jsonStr= EntityUtils.toString(entity);
+            map = jsonBinder.fromJson(jsonStr,Map.class);
+
+        }catch (Exception e){
+            logger.error("校验二维码时出错",e);
+        }finally {
+            closeResponse(response);
+        }
+
+        return map;
     }
 
 }

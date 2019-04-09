@@ -117,6 +117,7 @@ public class FileUtil {
 
 	/**
 	 *  把内容content写的path文件中
+	 *  替换原来的内容
 	 * @param content
 	 * @param path
 	 * @return
@@ -148,6 +149,38 @@ public class FileUtil {
 			 *
 			 */
 			fw = new FileWriter(new File(path), false);
+			if (content != null) {
+				fw.write(content);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			if (fw != null) {
+				try {
+					fw.flush();
+					fw.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 *  把内容content写的path文件中
+	 *  追加内容到文件末尾
+	 * @param content
+	 * @param path
+	 * @return
+	 */
+	public static boolean saveTo(String content, String path) {
+		//不存在创建文件
+		crateNotExists(path);
+		FileWriter fw = null;
+		try {
+			fw = new FileWriter(new File(path), true);
 			if (content != null) {
 				fw.write(content);
 			}

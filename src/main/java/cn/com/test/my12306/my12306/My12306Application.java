@@ -5,16 +5,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+import javax.annotation.PreDestroy;
 import java.util.concurrent.CountDownLatch;
 
 @SpringBootApplication
 @EnableScheduling
+@EnableAsync
 public class My12306Application implements CommandLineRunner {
 
 	@Autowired
 	ClientTicket ct;
+	/*@Autowired
+	ClientTicketA cta;*/
 	public static void main(String[] args) {
 //		SpringApplication.run(My12306Application.class, args);
 		SpringApplicationBuilder builder = new SpringApplicationBuilder(My12306Application.class);
@@ -29,5 +34,10 @@ public class My12306Application implements CommandLineRunner {
 		System.out.println("开始执行");
 		ct.run();
         latch.await();
+	}
+
+	@PreDestroy
+	public void testDestroy(){
+//		System.out.println("exit 哈哈1");
 	}
 }

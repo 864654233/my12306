@@ -1,13 +1,29 @@
 package cn.com.test.my12306.my12306.core.util;
 
+import cn.com.test.my12306.my12306.core.TicketHttpClient;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.Test;
+import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
 
 
 public class DateUtil {
@@ -258,6 +274,7 @@ public class DateUtil {
 ////    	System.out.println(getVisitDay(logMap));
 //    	System.out.println(getCreateDay(new Date()));
 //    	System.out.println(getNextDay("20161231"));
+		System.out.println((new Date()).getTime());
     	System.out.println(getDayNum(1463515721732l, 1463515721683l));
     	System.out.println(getHourNum("2016-03-05 12", "2016-03-02 10"));
     	System.out.println(getNextXHour("2016-03-02 08", 3));
@@ -316,10 +333,11 @@ public class DateUtil {
 	 */
     public static boolean isNormalTime(){
     	boolean runFlag = false;
-    	String startTimeStr = "06:58:40";
+    	String startTimeStr = "5:58:40";
     	String endTimeStr ="23:00:00";
 		String format = "HH:mm:ss";
 		SimpleDateFormat sf = new SimpleDateFormat("HH:mm:ss");
+		sf.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
 		String now = sf.format(new Date());
 //		now = "05:58:00";
 		Date nowTime;
@@ -338,6 +356,21 @@ public class DateUtil {
 			e.printStackTrace();
 		}
 		return runFlag;
+	}
+
+	public static boolean isNormalTime1(){
+		String startTimeStr = "05:58:40";
+		String endTimeStr ="23:00:00";
+		LocalTime now = LocalTime.now();
+		LocalTime startTime = LocalTime.parse(startTimeStr);
+		LocalTime endTime = LocalTime.parse(endTimeStr);
+		if(now.isAfter(startTime) && now.isBefore(endTime)){
+			System.out.println("系统时间在"+startTimeStr+"点到"+endTimeStr+"点之间.");
+			return true;
+		}else{
+			System.out.println("系统时间不在"+startTimeStr+"点到"+endTimeStr+"点之间.");
+			return false;
+		}
 	}
 
 	/**
@@ -372,6 +405,69 @@ public class DateUtil {
 	}
 	@Test
 	public void testaaa(){
-		System.out.println(isNormalTime());
+		Set<String> zoneIds = ZoneId.getAvailableZoneIds();
+		for  (String  zoneId: zoneIds) {
+			System.out.println(zoneId);
+		}
+		System.out.println(isNormalTime1());
+	}
+
+	@Test
+	public void testProxy(){
+		CloseableHttpClient httpClient=null;
+		try {
+			String p = "195.235.200.147:3128,66.70.167.115:3128,1.10.186.228:38899,5.141.244.231:42968,140.227.204.165:3128,121.61.3.163:9999,80.255.151.67:8080,103.207.37.46:2048,103.224.38.2:82,188.191.29.15:48206,114.247.94.85:8888,101.51.141.64:53330,92.47.148.10:60227,185.136.166.243:1080,95.31.4.125:34491,117.242.147.93:57656,134.249.154.204:32231,78.186.140.120:50589,197.50.222.213:50963,1.10.186.171:47251,103.250.158.21:30843,218.22.7.62:53281,59.91.127.29:53844,179.189.31.9:56740,190.90.63.68:58218,1.20.100.207:51829,190.223.60.181:8080,196.2.13.36:39788,138.204.233.242:53281,84.52.84.157:44331,147.75.117.106:8080,84.237.99.166:80,190.90.143.245:44127,103.106.32.129:49299,124.41.240.79:30276,92.242.117.166:8888,202.40.183.246:45241,182.253.38.47:8080,1.20.101.177:45622,103.15.140.140:44759,197.253.19.18:41345,5.189.144.198:3128,191.7.20.134:3128,194.158.201.187:44168,58.55.133.50:9999,181.143.17.178:58550,49.159.2.112:31181,178.128.82.117:8080,91.213.119.246:31551,118.189.172.136:80";
+			String[] s = p.split(",");
+			for(String ss:s){
+				String[] x = ss.split(":");
+
+//			HttpHost proxy1 = new HttpHost("101.236.41.207", 3128, "https");
+//			HttpHost proxy1 = new HttpHost("91.229.240.50", 21231);
+//			HttpHost proxy1 = new HttpHost("95.31.4.125", 34491);
+			HttpHost proxy1 = new HttpHost(x[0], Integer.valueOf(x[1]));
+			//超时设置
+			RequestConfig requestConfig = RequestConfig.custom()
+					.setConnectTimeout(6000).setConnectionRequestTimeout(20000)
+					.setProxy(proxy1)
+					.setSocketTimeout(15000).build();
+			httpClient=  TicketHttpClient.getClient();
+			String urlStr = "http://kyfw.12306.cn/otn/leftTicket/queryZ?leftTicketDTO.train_date=2019-01-26&leftTicketDTO.from_station=BOP&leftTicketDTO.to_station=VVP&purpose_codes=ADULT";
+//			String urlStr = "http://61.188.191.254/otn/leftTicket/queryZ?leftTicketDTO.train_date=2019-01-26&leftTicketDTO.from_station=BOP&leftTicketDTO.to_station=VVP&purpose_codes=ADULT";
+//			String urlStr = "https://www.baidu.com";
+
+//			String urlStr = "";
+//            System.out.println("ip:"+queryIp);
+			HttpGet httpget = new HttpGet(urlStr);
+			httpget.setHeader("Host", "kyfw.12306.cn");//设置host
+			httpget.setHeader("If-Modified-Since", "0");
+			httpget.setHeader("Cache-Control", "no-cache");
+			httpget.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+			httpget.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
+			httpget.setConfig(requestConfig);
+				HttpResponse response = null;
+				try {
+					response = httpClient.execute(httpget);
+				} catch (IOException e) {
+//					e.printStackTrace();
+					continue;
+				}
+				HttpEntity entity = response.getEntity();
+			String content = EntityUtils.toString(entity, "UTF-8");
+			System.out.println("fffffffffffffff"+content);
+			if(!StringUtils.isEmpty(content)){
+				System.out.println(x[0]+":"+x[1]+"可用");
+			}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}finally {
+			if(null!=httpClient){
+				try {
+					httpClient.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
 	}
 } 
