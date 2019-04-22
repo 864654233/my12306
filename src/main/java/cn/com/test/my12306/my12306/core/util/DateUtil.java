@@ -31,7 +31,7 @@ public class DateUtil {
 	public static SimpleDateFormat shortSdf = new SimpleDateFormat("yyyy-MM-dd");
 	public static SimpleDateFormat longHourSdf = new SimpleDateFormat("yyyy-MM-dd HH"); 
 	public static SimpleDateFormat longSdf =new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"); 
-	public static SimpleDateFormat ymdSdf = new SimpleDateFormat("yyyyMMdd");
+	public static SimpleDateFormat ymdSdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	 /** 
      * 获得本天的开始时间，即2012-01-01 00:00:00 

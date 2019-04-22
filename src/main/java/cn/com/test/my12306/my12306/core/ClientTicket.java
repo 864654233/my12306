@@ -600,12 +600,17 @@ public class ClientTicket /*implements ApplicationRunner*/{
 //            ct.xianchengshuapiao(es);
             //订票线程？主程序订票
             if(commonUtil.getAutoSub().equals("1")){
+                /**官网自动预定流程*/
 //                new Thread(new AutoTicketBook(ct,queue,ct.getHttpclient(),headers,cookieStore)).start();
                 for(int i = 0;i<10;i++){
                     asyncTicketBook.run();
                 }
-            }else{
+            }else if(commonUtil.getAutoSub().equals("2")){
+                /**预定抢票流程*/
                 new Thread(new TicketBook(ct,queue,ct.getHttpclient(),headers,cookieStore)).start();
+            }else if(commonUtil.getAutoSub().equals("3")){
+                /**改签刷票*/
+                new Thread(new TicketResign(ct,queue,ct.getHttpclient(),headers,cookieStore)).start();
             }
            /* while(ct.queue.size()==0){
                 Thread.sleep(200);
@@ -1067,6 +1072,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             logger.info("用到的header：{}",headers[0].getValue());
             Header headerHost = new BasicHeader("Host","kyfw.12306.cn");
             String params = "algID=stlPYD4gpV&hashCode=pAsqygwgJFux1ohtGryn1E84twryYmobdaQj6QLm4Ss&FMQw=1&q4f3=zh-CN&VySQ=FGGELzCLkZ3be5N_q7iX4OwsdRYoVSq0&VPIf=1&custID=133&VEek=unspecified&dzuS=0&yD16=0&EOQP=13c246fe6c83ce181f4fd5e79c60a4ff&lEnu=168107667&jp76=d41d8cd98f00b204e9800998ecf8427e&hAqN=Win32&platform=WEB&ks0Q=d41d8cd98f00b204e9800998ecf8427e&TeRS=728x1366&tOHY=24xx768x1366&Fvje=i1l1s1&q5aJ=-8&wNLf=99115dfb07133750ba677d055874de87&0aew=%s&E3gR=500781a8a6be6202627e398a65b7e48e&timestamp=%s";
+                   params = "algID=sWSiTx3CZt&hashCode=6w6FL5iWngdYiQrTwkx9-BZzsQBXF6ziMNSZitpxLGs&FMQw=1&q4f3=zh-CN&VySQ=FGEnhrMaHkt-VxnYXhuiEDixQTOyBzCr&VPIf=1&custID=133&VEek=unspecified&dzuS=0&yD16=0&EOQP=13c246fe6c83ce181f4fd5e79c60a4ff&lEnu=168107667&jp76=d41d8cd98f00b204e9800998ecf8427e&hAqN=Win32&platform=WEB&ks0Q=d41d8cd98f00b204e9800998ecf8427e&TeRS=728x1366&tOHY=24xx768x1366&Fvje=i1l1s1&q5aJ=-8&wNLf=99115dfb07133750ba677d055874de87&0aew=%s&E3gR=500781a8a6be6202627e398a65b7e48e&timestamp=%s";
             params = String.format(params,URLEncoder.encode(headers[0].getValue(),"utf-8"),(new Date()).getTime() );
             logger.info("获取设备信息："+params);
             HttpUriRequest getDevice = RequestBuilder.get()//.post()

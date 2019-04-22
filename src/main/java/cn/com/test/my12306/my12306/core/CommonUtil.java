@@ -76,6 +76,8 @@ public class CommonUtil {
 
     public static String userName="xxx";//12306 账号
     public static String userPwd="yyy";//12306 账号
+    //需要改签的订单号
+    public static String resignNo="Exxxxxx";
 
 //hosts 参考：https://github.com/ebert-chan/kyfw12306/blob/master/hosts.json
     //https://github.com/testerSunshine/12306/blob/master/cdn_list
@@ -206,6 +208,14 @@ public class CommonUtil {
     @Value("${logonType}")
     public void setLogonType(String logonType) {
         CommonUtil.logonType = logonType;
+    }
+
+    public String getResignNo() {
+        return resignNo;
+    }
+    @Value("${resignNO}")
+    public void setResignNo(String resignNo) {
+        CommonUtil.resignNo = resignNo;
     }
 
     public Map<String, String> getStationMap() {
