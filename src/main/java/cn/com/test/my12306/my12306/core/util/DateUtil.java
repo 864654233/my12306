@@ -333,7 +333,7 @@ public class DateUtil {
 	 */
     public static boolean isNormalTime(){
     	boolean runFlag = false;
-    	String startTimeStr = "5:58:40";
+    	String startTimeStr = "5:59:50";
     	String endTimeStr ="23:00:00";
 		String format = "HH:mm:ss";
 		SimpleDateFormat sf = new SimpleDateFormat("HH:mm:ss");

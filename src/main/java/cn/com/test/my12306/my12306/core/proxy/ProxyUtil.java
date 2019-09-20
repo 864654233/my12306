@@ -203,7 +203,7 @@ public class ProxyUtil {
                         .setProxy(proxy1)
                         .setSocketTimeout(5000).build();
                 httpClient = TicketHttpClient.getClient();
-                String urlStr = "http://kyfw.12306.cn/otn/" + ct.getLeftTicketUrl() + "?leftTicketDTO.train_date=" + commonUtil.getDate() + "&leftTicketDTO.from_station=" + commonUtil.getFromCode() + "&leftTicketDTO.to_station=" + commonUtil.getToCode() + "&purpose_codes=ADULT";
+                String urlStr = "http://kyfw.12306.cn/otn/" + ct.getLeftTicketUrl() + "?leftTicketDTO.train_date=" + commonUtil.getBuyDate() + "&leftTicketDTO.from_station=" + commonUtil.getFromCode() + "&leftTicketDTO.to_station=" + commonUtil.getToCode() + "&purpose_codes=ADULT";
                 HttpGet httpget = new HttpGet(urlStr);
                 httpget.setHeader("Host", "kyfw.12306.cn");//设置host
                 httpget.setHeader("If-Modified-Since", "0");

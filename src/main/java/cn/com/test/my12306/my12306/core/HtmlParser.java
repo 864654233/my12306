@@ -39,9 +39,9 @@ public class HtmlParser {
             Header[] headers = new BasicHeader[5];
             headers[0] = new BasicHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
             headers[1] = new BasicHeader("Host", "www.xuanshu.com");
-            headers[2] = new BasicHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+            headers[2] = new BasicHeader("Accept", "*/*");
             headers[3] = new BasicHeader("Accept-Encoding", "gzip, deflate, br");
-            headers[4] = new BasicHeader("Accept-Language", "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2");
+            headers[4] = new BasicHeader("Accept-Language", "zh-CN,zh;q=0.9");
             HttpUriRequest initPage1 = RequestBuilder.get()//.post()
                     .setUri(new URI(uri))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4])

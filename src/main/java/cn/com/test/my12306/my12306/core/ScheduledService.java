@@ -2,40 +2,17 @@
 package cn.com.test.my12306.my12306.core;
 
 import cn.com.test.my12306.my12306.core.proxy.ProxyUtil;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.client.methods.RequestBuilder;
-import org.apache.http.impl.client.BasicCookieStore;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicHeader;
-import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
-import java.io.BufferedWriter;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.net.URI;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
 
 @Component
 public class ScheduledService {
 
     @Autowired
     ClientTicket ct;
-    @Autowired
-    ClientTicketA cta;
     @Autowired
     CommonUtil commonUtil;
 
@@ -60,16 +37,16 @@ public class ScheduledService {
      * 早上6点重新开启任务
      * cron需晚于DateUtil中的startTimeStr
      */
-    @Scheduled(cron="50 58 5 * * ?")
+    @Scheduled(cron="55 59 5 * * ?")
 //    @Scheduled(cron="50 25/5 10 * * ?")
     public void startCT(){
         logger.info("启动主线程开始刷票");
         try {
-                if(commonUtil.getUseProxy()==1){
-                    proxyUtil.resetProxy();
-                }
+            if(commonUtil.getUseProxy()==1){
+                proxyUtil.resetProxy();
+            }
 //                ct.run();
-                ct.startQueryThread();
+            ct.startQueryThread();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -79,24 +56,17 @@ public class ScheduledService {
      * 早上6点到晚上23点每隔15分钟 校验下登陆状态
      *
      */
-    @Scheduled(cron="0 0/15 06-22 * * ?")
+    @Scheduled(cron="0 0/15 7-22 * * ?")
     public void checkOnline(){
-        try {
-            Map<String,Object> onlineMap = ct.checkOnlineStatus(null);
-            if(null!=onlineMap && onlineMap.size()>0){
-                if(!"0".equalsIgnoreCase(onlineMap.get("result_code")+"")){
-                    logger.info("检测到已掉线，重新登陆中");
-                    //停止刷票任务 防止登陆获取不到资源
-                    ct.shutdownqueryThread();
-                    ct.login(null);
-                    logger.info("重新登陆已完成");
-                    //重新开启刷票
-                    ct.startQueryThread();
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        ct.checkOnlineStatus(null);
+    }
+    /**
+     * 早上6点5分每隔15分钟 校验下登陆状态
+     *
+     */
+    @Scheduled(cron="0 5/15 6 * * ?")
+    public void checkOnline1(){
+        ct.checkOnlineStatus(null);
     }
 
     /**

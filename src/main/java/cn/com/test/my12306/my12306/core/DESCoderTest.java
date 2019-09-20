@@ -1,13 +1,20 @@
 package cn.com.test.my12306.my12306.core;
 
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
+import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.methods.RequestBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.Test;
+import sun.misc.BASE64Decoder;
 
 import java.net.URLDecoder;
 import java.text.ParseException;
@@ -29,7 +36,7 @@ public class DESCoderTest {
 	}
 	@Test
 	public void testPattern(){
-		
+
 		Pattern pattern = Pattern.compile("\\d");
 		Matcher m = pattern.matcher("re2qu11est");
 		Matcher m1 = pattern.matcher("re2qu11est");
@@ -43,6 +50,46 @@ public class DESCoderTest {
 		System.out.println(m1.replaceAll("AA"));
 	}
 
+
+	@Test
+	public void testCdn(){
+		CloseableHttpClient httpClient=null;
+		try{
+			httpClient = TicketHttpClient.getClient();
+			Header h1 = new BasicHeader("Host","www.12306bypass.com");
+			Header h2 = new BasicHeader("Accept","*/*");
+			Header h3 = new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
+			Header h4 = new BasicHeader("Content-Type","application/x-www-form-urlencoded");
+			HttpUriRequest getDevice = RequestBuilder.post()
+					.setUri("http://www.12306bypass.com/Cdn.ashx")
+					.addHeader(h1).addHeader(h2).addHeader(h3).addHeader(h4)
+					.addParameter("IP","z3LpOoI%2bU4Xq2PMlWFk8ivV0DroNe7OCWD0errvkN10MAeuKjlp%2ffNSURRXWmXxXOjcjkt1CUYcv5Y%2fu%2bhiw%2bw%3d%3d")
+					.addParameter("Obtain","1")
+					.addParameter("Remark","CDN鍙嶉\uE6ED涓庤幏鍙?")
+					.build();
+			CloseableHttpResponse response2 = httpClient.execute(getDevice);
+			HttpEntity entity = response2.getEntity();
+			String jsonStr= EntityUtils.toString(entity);
+			System.out.println(jsonStr);
+
+		}catch (Exception e){
+			e.printStackTrace();
+		}
+	}
+
+	@Test
+	public void testBase64(){
+		BASE64Decoder decoder = new BASE64Decoder();
+		try {
+			String s ="";
+			byte[] b = decoder.decodeBuffer("ehbOX7bboYmFC2oyvJfZjQ==");
+			s = new String(b,"utf-8");
+			System.out.println(s);
+		} catch (Exception e) {
+
+		}
+
+	}
 	@Test
 	public void testEncode(){
 		String url="http%3A%2F%2Fwww.baidu.com%2Fa%3Fb%3Dc%26d%3D%E4%B8%AD%E6%96%87";

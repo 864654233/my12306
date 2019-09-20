@@ -29,6 +29,7 @@ package cn.com.test.my12306.my12306.core;
 import org.apache.http.HttpHost;
 import org.apache.http.NoHttpResponseException;
 import org.apache.http.conn.ConnectTimeoutException;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -55,13 +56,14 @@ public class TicketHttpClient {
 
             SSLContext sslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy() {
                 // 信任所有
+                @Override
                 public boolean isTrusted(X509Certificate[] chain, String authType) throws CertificateException {
                     return true;
                 }
             }).build();
 
-            httpClientBuilder.setSSLContext(sslContext);
-            httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler(0,false));
+            httpClientBuilder = httpClientBuilder.setSSLContext(sslContext);
+            httpClientBuilder = httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler(0,false));
             HttpHost proxy = new HttpHost("106.14.162.110", 8080, "http");
             DefaultProxyRoutePlanner routePlanner = new DefaultProxyRoutePlanner(proxy);
 //            httpClientBuilder.setRoutePlanner(routePlanner);
@@ -80,6 +82,30 @@ public class TicketHttpClient {
                 }
                 return false;
             });*/
+            httpClientBuilder.setSSLHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+            httpClient = httpClientBuilder.build();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return httpClient;
+    }
+
+    public static CloseableHttpClient getRetryClient() {
+        CloseableHttpClient httpClient = null;
+        try {
+            HttpClientBuilder httpClientBuilder = HttpClientBuilder.create();
+            SSLContext sslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy() {
+                // 信任所有
+                @Override
+                public boolean isTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                    return true;
+                }
+            }).build();
+
+            httpClientBuilder = httpClientBuilder.setSSLContext(sslContext);
+            httpClientBuilder = httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler(3,false));
+            httpClientBuilder.setSSLHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+//            httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler());
             httpClient = httpClientBuilder.build();
         } catch (Exception e) {
             e.printStackTrace();

@@ -82,8 +82,6 @@ public class AsyncTicketQuery {
 
 
 
-        Map<String,Integer> trainSeatMap = ct.getTrainSeatMap();
-        Map<String,Long> trainSeatTimeMap = ct.getTrainSeatTimeMap();
         queue = ct.queue;
         Random random = new Random();
         int max=3000;
@@ -123,32 +121,42 @@ public class AsyncTicketQuery {
                     ct.nullCount.set(0);
                     ct.queryInit(null);
                 }
-            httpClient = TicketHttpClient.getClient();
+                if(commonUtil.isCdnDone()){
+                    httpClient = TicketHttpClient.getRetryClient();
+                }else{
+                    httpClient = TicketHttpClient.getClient();
+                }
 
-            String queryIp = commonUtil.getUseProxy()==1 && proxyUtil.getProxySize()>=8?"kyfw.12306.cn":commonUtil.getIp();
+                String queryIp = commonUtil.getUseProxy()==1 && proxyUtil.getProxySize()>=8?"kyfw.12306.cn": commonUtil.getIp();
 //            String queryIp = commonUtil.getIp();
 //            ct.setLeftTicketUrl("leftTicket/queryA");
-            String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+commonUtil.getDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
+                String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+ commonUtil.getBuyDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
 //            logger.info("url:{}",urlStr);
-            HttpGet httpget = new HttpGet(urlStr);
-            httpget.setHeader("Host", "kyfw.12306.cn");//设置host
+                HttpGet httpget = new HttpGet(urlStr);
+                httpget.setHeader("Host", "kyfw.12306.cn");//设置host
                 httpget.setHeader("If-Modified-Since", "0");
                 httpget.setHeader("Cache-Control", "no-cache");
                 httpget.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36");
-                httpget.setHeader("Content-Type", "application/x-www-form-urlencoded");
+//                httpget.setHeader("Content-Type", "application/x-www-form-urlencoded");
                 httpget.setConfig(requestConfig);
-            HttpResponse response = httpClient.execute(httpget);
-            HttpEntity entity = response.getEntity();
-            if(response.getStatusLine().getStatusCode()!=200){
-                logger.info("查询错误：{}，statusline:{}",ct.nullCount.get(),response.getStatusLine());
-                ct.nullCount.addAndGet(1);
-                ((CloseableHttpResponse) response).close();
-                continue ;
-            }
-            String content = EntityUtils.toString(entity, "UTF-8");
+//                ct.httpclient
+            HttpResponse response =  ct.httpclient.execute(httpget);
+//                HttpResponse response =  httpClient.execute(httpget);
+                HttpEntity entity = response.getEntity();
+                if(response.getStatusLine().getStatusCode()!=200){
+                    logger.info("查询错误：{}，ip:{},statusline:{}",ct.nullCount.get(),queryIp,response.getStatusLine());
+                    ct.nullCount.addAndGet(1);
+                    ((CloseableHttpResponse) response).close();
+                    continue ;
+                }
+                String content = EntityUtils.toString(entity, "UTF-8");
                 Map<String, Object> rsmap = null;
                 if(content.contains("DOCTYPE html PUBLIC") || content.contains("502 Bad Gateway")){
                     logger.error("网络存在问题，被禁");
+                    continue;
+                }
+                if(content.contains("html") || content.contains("script")){
+                    logger.error("查询结果异常");
                     continue;
                 }
                 rsmap = this.jsonBinder.fromJson(content, Map.class);
@@ -162,60 +170,38 @@ public class AsyncTicketQuery {
                     Map data = (Map)rsmap.get("data");
                     if(data.size()>0){
                         List<String> arr = (List<String>)data.get("result");
-//                        System.out.println(arr.size()+"a "+arr.get(0));
-//                        Map<String,Map<String,String>> map = new HashMap<String,Map<String,String>>();
                         Map<String,Map<String,String>> map = new ConcurrentHashMap<String,Map<String,String>>();
                         commonUtil.jiexi(arr,map);
-                        List< Map<String,String>> youpiao= commonUtil.getSecretStr(map,commonUtil.getTrains(),commonUtil.getSeats());
-                       if(youpiao.size()>0){
-                           for(Map<String,String> map1:youpiao){
-                               String chehao = map1.get("chehao");
-                               String tobuySeat = map1.get("toBuySeat");
-                               Long shijian = trainSeatTimeMap.get(chehao+"_"+tobuySeat);
-                               Integer cishu =trainSeatMap.get(chehao+"_"+tobuySeat);
+                        List< Map<String,String>> youpiao= commonUtil.getSecretStr(map, commonUtil.getToBuyTrains(), commonUtil.getToBuySeat());
+                        if(youpiao.size()>0){
+                            for(Map<String,String> map1:youpiao){
+                                String chehao = map1.get("chehao");
+                                String tobuySeat = map1.get("toBuySeat");
+                                Long shijian = ct.getBlackMap().get(chehao+"_"+tobuySeat);
                                 if(null!=shijian ){
-                                    if(System.currentTimeMillis()>shijian){
-                                        trainSeatMap.put(chehao+"_"+tobuySeat,0);
-                                        cishu=0;
+                                    if(System.currentTimeMillis()<shijian){
+                                        logger.info("发现僵尸票，暂不处理");
+                                        continue;
                                     }
                                 }
-                               if(null!=cishu ){
-                                if(cishu>3){
-                                    //放入小黑屋15秒
-                                    trainSeatTimeMap.put(chehao+"_"+tobuySeat,System.currentTimeMillis()+15*1000);
-                                    trainSeatMap.put(chehao+"_"+tobuySeat,0);
-                                    System.out.println(chehao+"_"+tobuySeat+"放入小黑屋15秒");
-                                }else{
-                                    trainSeatMap.put(chehao+"_"+tobuySeat,cishu+1);
-                                    queue.put(map1);
-//                                    System.out.println(queue);
-                                }
-                               }else{//第一次
-                                   queue.put(map1);
-                                   trainSeatMap.put(chehao+"_"+tobuySeat,0);
-                               }
+                                queue.put(map1);
 
-                           }
-                         /*  Map<Integer,String> mapQueue=new HashMap<Integer,String>();
-                           mapQueue.put(0,secretStr.split(",")[0]);//secret
-                           mapQueue.put(1,secretStr.split(",")[1]);//席别
-                           mapQueue.put(2,secretStr.split(",")[2]);//车次
-                           System.out.println();
-                           queue.put(mapQueue);*/
-                       }
+                            }
+                        }
 //                       System.out.println(queryIp + "查询成功");
 //                        ct.ipSet.add(queryIp);
                         //有一次查询成功，说明地址还能用
                         ct.nullCount.set(0);
-                       logger.info("==========================={}:查询成功,随机等待{}毫秒,ipSet {}=================",queryIp,a,ct.ipSet.size());
-                       if(ct.ipSet.size()>500){
-                           String ips ="";
-                           for(String str:ct.ipSet){
-                               ips+="\""+str+"\",";
-                           }
-                           FileUtil.saveAs(ips,"D:/my12306/allIP.txt");
-                           System.exit(0);
-                       }
+                        commonUtil.setUsefulList(queryIp);
+                        logger.info("==========================={}:查询成功,随机等待{}毫秒,ipSet {}=================",queryIp,a,ct.ipSet.size());
+                        if(ct.ipSet.size()>500){
+                            String ips ="";
+                            for(String str:ct.ipSet){
+                                ips+="\""+str+"\",";
+                            }
+                            FileUtil.saveAs(ips,"D:/my12306/allIP.txt");
+                            System.exit(0);
+                        }
                     }
                 }
                 ((CloseableHttpResponse) response).close();
@@ -228,6 +214,7 @@ public class AsyncTicketQuery {
             }catch (InterruptedException ie){
 
             }catch (Exception e){
+//                logger.error("查询出錯x",e);
                 logger.error("查询出錯x",e);
             }finally {
                 try{

@@ -36,7 +36,6 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.stereotype.Component;
 
 import java.net.SocketTimeoutException;
 import java.util.List;
@@ -44,7 +43,6 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
-//@Component
 public class TicketQuery implements  Runnable{
 
     public JsonBinder jsonBinder = JsonBinder.buildNonNullBinder(false);
@@ -72,27 +70,22 @@ public class TicketQuery implements  Runnable{
                 .setConnectTimeout(3000).setConnectionRequestTimeout(3000)
                 .setSocketTimeout(3000).build();
 
-
-
-        Map<String,Integer> trainSeatMap = ct.getTrainSeatMap();
-        Map<String,Long> trainSeatTimeMap = ct.getTrainSeatTimeMap();
-
         while(ct.canRun){
             long startTime = System.currentTimeMillis();
             CloseableHttpClient httpClient=null;
             try{
-            httpClient = TicketHttpClient.getClient();
+                httpClient = TicketHttpClient.getClient();
 
-            String queryIp = commonUtil.getIp();
+                String queryIp = commonUtil.getIp();
 
-            String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+commonUtil.getDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
+                String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+ commonUtil.getBuyDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
 //            System.out.println("ip:"+queryIp);
-            HttpGet httpget = new HttpGet(urlStr);
-            httpget.setHeader("Host", "kyfw.12306.cn");//设置host
+                HttpGet httpget = new HttpGet(urlStr);
+                httpget.setHeader("Host", "kyfw.12306.cn");//设置host
                 httpget.setConfig(requestConfig);
-            HttpResponse response = httpClient.execute(httpget);
-            HttpEntity entity = response.getEntity();
-            String content = EntityUtils.toString(entity, "UTF-8");
+                HttpResponse response = httpClient.execute(httpget);
+                HttpEntity entity = response.getEntity();
+                String content = EntityUtils.toString(entity, "UTF-8");
                 Map<String, Object> rsmap = null;
                 if(content.contains("DOCTYPE html PUBLIC") || content.contains("502 Bad Gateway")){
                     logger.error("网络存在问题，被禁");
@@ -113,45 +106,25 @@ public class TicketQuery implements  Runnable{
 //                        Map<String,Map<String,String>> map = new HashMap<String,Map<String,String>>();
                         Map<String,Map<String,String>> map = new ConcurrentHashMap<String,Map<String,String>>();
                         commonUtil.jiexi(arr,map);
-                        List< Map<String,String>> youpiao= commonUtil.getSecretStr(map,commonUtil.getTrains(),commonUtil.getSeats());
-                       if(youpiao.size()>0){
-                           for(Map<String,String> map1:youpiao){
-                               String chehao = map1.get("chehao");
-                               String tobuySeat = map1.get("toBuySeat");
-                               Long shijian = trainSeatTimeMap.get(chehao+"_"+tobuySeat);
-                               Integer cishu =trainSeatMap.get(chehao+"_"+tobuySeat);
+                        List< Map<String,String>> youpiao= commonUtil.getSecretStr(map, commonUtil.getToBuyTrains(), commonUtil.getToBuySeat());
+                        if(youpiao.size()>0){
+                            for(Map<String,String> map1:youpiao){
+                                String chehao = map1.get("chehao");
+                                String tobuySeat = map1.get("toBuySeat");
+                                Long shijian = ct.getBlackMap().get(chehao+"_"+tobuySeat);
                                 if(null!=shijian ){
-                                    if(System.currentTimeMillis()>shijian){
-                                        trainSeatMap.put(chehao+"_"+tobuySeat,0);
-                                        cishu=0;
+                                    if(System.currentTimeMillis()<shijian){
+                                        logger.info("发现僵尸票，暂不处理");
+                                        continue;
                                     }
                                 }
-                               if(null!=cishu ){
-                                if(cishu>3){
-                                    //放入小黑屋15秒
-                                    trainSeatTimeMap.put(chehao+"_"+tobuySeat,System.currentTimeMillis()+15*1000);
-                                    trainSeatMap.put(chehao+"_"+tobuySeat,0);
-                                    System.out.println(chehao+"_"+tobuySeat+"放入小黑屋15秒");
-                                }else{
-                                    trainSeatMap.put(chehao+"_"+tobuySeat,cishu+1);
-                                    queue.put(map1);
-//                                    System.out.println(queue);
-                                }
-                               }else{//第一次
-                                   queue.put(map1);
-                                   trainSeatMap.put(chehao+"_"+tobuySeat,0);
-                               }
+                                queue.put(map1);
 
-                           }
-                         /*  Map<Integer,String> mapQueue=new HashMap<Integer,String>();
-                           mapQueue.put(0,secretStr.split(",")[0]);//secret
-                           mapQueue.put(1,secretStr.split(",")[1]);//席别
-                           mapQueue.put(2,secretStr.split(",")[2]);//车次
-                           System.out.println();
-                           queue.put(mapQueue);*/
-                       }
+                            }
+                        }
 //                       System.out.println(queryIp + "查询成功");
-                       logger.info("==========================={}:查询成功=================",queryIp);
+                        commonUtil.setUsefulList(queryIp);
+                        logger.info("==========================={}:查询成功=================",queryIp);
                     }
                 }
             }catch (ConnectTimeoutException e1){

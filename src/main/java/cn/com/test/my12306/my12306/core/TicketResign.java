@@ -47,7 +47,6 @@ import java.awt.event.MouseEvent;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -79,7 +78,7 @@ public class TicketResign implements  Runnable{
     private String bookRancode="";
     private static Logger logger = LogManager.getLogger(TicketResign.class);
 
-    CommonUtil commonUtil = new CommonUtil() ;
+    CommonUtil commonUtil  ;
 
     public TicketResign(ClientTicket ct, BlockingQueue<Map<String, String>>queue, CloseableHttpClient httpclient, Header[] headers, BasicCookieStore cookieStore) {
         this.ct = ct;
@@ -87,14 +86,15 @@ public class TicketResign implements  Runnable{
         this.httpclient = httpclient;
         this.headers = headers;
         this.cookieStore = cookieStore;
+        this.commonUtil = ct.commonUtil;
         if(this.headers.length!=8){
             this.headers = new BasicHeader[8];
             this.headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
             this.headers[1] = new BasicHeader("Host","kyfw.12306.cn");
             this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init");
             this.headers[3] = new BasicHeader("Accept","*/*");
-            this.headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
-            this.headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
+            this.headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate, br");
+            this.headers[5] = new BasicHeader("Accept-Language","zh-CN,zh;q=0.9");
             this.headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded; charset=UTF-8");
 //            this.headers[7] = new BasicHeader("Origin","https://kyfw.12306.cn");
             this.headers[7] = new BasicHeader("Cache-Control","no-cache");
@@ -113,8 +113,8 @@ public class TicketResign implements  Runnable{
             this.headers[1] = new BasicHeader("Host","kyfw.12306.cn");
             this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init");
             this.headers[3] = new BasicHeader("Accept","*/*");
-            this.headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate");
-            this.headers[5] = new BasicHeader("Accept-Language","zh-Hans-CN,zh-Hans;q=0.8,en-US;q=0.5,en;q=0.3");
+            this.headers[4] = new BasicHeader("Accept-Encoding","gzip, deflate, br");
+            this.headers[5] = new BasicHeader("Accept-Language","zh-CN,zh;q=0.9");
             this.headers[6] = new BasicHeader("Content-Type","application/x-www-form-urlencoded; charset=UTF-8");
 //            this.headers[7] = new BasicHeader("Origin","https://kyfw.12306.cn");
             this.headers[7] = new BasicHeader("Cache-Control","no-cache");
@@ -127,22 +127,22 @@ public class TicketResign implements  Runnable{
     @SuppressWarnings("unchecked")
     @Override
     public void run(){
-            String orderId ="";
+        String orderId ="";
         Map<String,String> map =null;
-            try{
-                Map<String,Object> resignOrder = queryMyOrder(headers);
-                String flag1 = resginTicket(resignOrder,headers);
-                if(flag1.equals("N")){
-                    System.out.println("改签没问题");
-                }
-                kaishi:
-                while(orderId.equals("") && (map= queue.take())!=null){
-                    resetHeaders();
-                    this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init");
+        try{
+            Map<String,Object> resignOrder = queryMyOrder(headers);
+            String flag1 = resginTicket(resignOrder,headers);
+            if(flag1.equals("N")){
+                System.out.println("改签没问题");
+            }
+            kaishi:
+            while(orderId.equals("") && (map= queue.take())!=null){
+                resetHeaders();
+                this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/leftTicket/init");
 
-                    logger.info("有票了，开始改签");
+                logger.info("有票了，开始改签");
                 //校验是否登陆 略
-                    int flag = subOrder(map.get("secret"));
+                int flag = subOrder(map.get("secret"));
                 if(flag==1) { //跳转到提交订单页
 
                     String token = initGc();
@@ -167,7 +167,7 @@ public class TicketResign implements  Runnable{
                                 //获取验证码
                                 String valicode = getCode("", headers);
 
-                               logger.info("验证码：" + valicode);
+                                logger.info("验证码：" + valicode);
 
 
                                 //校验验证码
@@ -190,14 +190,14 @@ public class TicketResign implements  Runnable{
                                         Map<String, Object> dataMap = (Map<String, Object>)rsmap.get("data");
                                         String msg = rsmap.get("msg")+"";
                                         if(msg.equalsIgnoreCase("TRUE")){
-                                       logger.info("验证码校验通过");
-                                        checkedCode=true;
+                                            logger.info("验证码校验通过");
+                                            checkedCode=true;
                                         }
                                     } else {
-                                       logger.info("验证码校验没有通过");
+                                        logger.info("验证码校验没有通过");
                                     }
                                 } catch (Exception e) {
-                                   logger.info("验证码校验没有通过");
+                                    logger.info("验证码校验没有通过");
                                     e.printStackTrace();
                                 } finally {
                                     response.close();
@@ -207,7 +207,7 @@ public class TicketResign implements  Runnable{
                         }
                         if (rs.equals("X")) {
                             //预订失败 直接返回
-                           logger.info("预定失败 返回X");
+                            logger.info("预定失败 返回X");
                             rsCode = "B";
                             continue redo;
                         }
@@ -215,10 +215,10 @@ public class TicketResign implements  Runnable{
                     //getQueue 略
                     getQueueCount(globalRepeatSubmitToken, map);
                     //确认订单信息
-                   boolean confirmFlag = confirmSingle(globalRepeatSubmitToken, key_check_isChange, map.get("toBuySeat"), map);
-                   if(!confirmFlag){
-                       continue kaishi ;
-                   }
+                    boolean confirmFlag = confirmSingle(globalRepeatSubmitToken, key_check_isChange, map.get("toBuySeat"), map);
+                    if(!confirmFlag){
+                        continue kaishi ;
+                    }
 
                     //进入排队等待
                     orderId = waitOrder(globalRepeatSubmitToken);
@@ -240,7 +240,7 @@ public class TicketResign implements  Runnable{
                 }else if (flag ==2){
                     ct.resetCookiesFile();
                     ct.resetCookieStore();
-                     headers = new BasicHeader[3];
+                    headers = new BasicHeader[3];
                     headers[0] =new BasicHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
                     headers[1] = new BasicHeader("Host","kyfw.12306.cn");
                     headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/resources/login.html");
@@ -251,12 +251,12 @@ public class TicketResign implements  Runnable{
                     continue kaishi ;
                 }
 
-                }
-
-                Thread.sleep(200L);
-            }catch (Exception e){
-               logger.error("预定时出错",e);
             }
+
+            Thread.sleep(200L);
+        }catch (Exception e){
+            logger.error("预定时出错",e);
+        }
 
 
     }
@@ -270,7 +270,7 @@ public class TicketResign implements  Runnable{
     public String getCode(String url,Header[] headers) throws IOException {
         //JFrame frame = new JFrame("验证码");
         this.bookRancode="";
-       logger.info("获取验证码的地址："+url);
+        logger.info("获取验证码的地址："+url);
 //        new TipTest("","","请输入验证码");
         JLabel label = new JLabel(new ImageIcon(getCodeByte(url,headers)),
                 JLabel.CENTER);
@@ -288,55 +288,55 @@ public class TicketResign implements  Runnable{
         return this.bookRancode;
     }
 
-public Map<String,Object> queryMyOrder(Header[] headers){
-    CloseableHttpResponse response=null;
-    Map<String,Object> myOrder =null;
-    List<Map<String,Object>> myOrderList =null;
-    try {
-         Date now = new Date();
-        this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/view/train_order.html");
-        HttpUriRequest myOrderRequest = RequestBuilder.post()
-                .setUri(new URI("https://"+ct.hosts+"/otn/queryOrder/queryMyOrder"))
-                .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                .addHeader(headers[7])
-                .addParameter("come_from_flag", "my_order")
-                .addParameter("pageIndex", "0")
-                .addParameter("pageSize", "80")
-                .addParameter("query_where", "G")
-                .addParameter("queryStartDate", DateUtil.getDaysAfter(DateUtil.getCurrentDay(now),-30))
-                .addParameter("queryEndDate", DateUtil.getCurrentDay(now))
-                .addParameter("queryType", "1")
-                .addParameter("sequeue_train_name", commonUtil.getResignNo())
-                .build();
-        response = httpclient.execute(myOrderRequest);
+    public Map<String,Object> queryMyOrder(Header[] headers){
+        CloseableHttpResponse response=null;
+        Map<String,Object> myOrder =null;
+        List<Map<String,Object>> myOrderList =null;
+        try {
+            Date now = new Date();
+            this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/view/train_order.html");
+            HttpUriRequest myOrderRequest = RequestBuilder.post()
+                    .setUri(new URI("https://"+ct.hosts+"/otn/queryOrder/queryMyOrder"))
+                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
+                    .addHeader(headers[7])
+                    .addParameter("come_from_flag", "my_order")
+                    .addParameter("pageIndex", "0")
+                    .addParameter("pageSize", "80")
+                    .addParameter("query_where", "G")
+                    .addParameter("queryStartDate", DateUtil.getDaysAfter(DateUtil.getCurrentDay(now),-30))
+                    .addParameter("queryEndDate", DateUtil.getCurrentDay(now))
+                    .addParameter("queryType", "1")
+                    .addParameter("sequeue_train_name", commonUtil.getResignNO())
+                    .build();
+            response = httpclient.execute(myOrderRequest);
 
-        Map<String, Object> rsmap = null;
+            Map<String, Object> rsmap = null;
 
-        HttpEntity entity = response.getEntity();
-        String responseBody = EntityUtils.toString(entity);
-        rsmap = jsonBinder.fromJson(responseBody, Map.class);
-        if (null!= rsmap && rsmap.get("status").toString().equalsIgnoreCase("true")) {
-            Map<String,Object> dataMap = (Map<String,Object>)rsmap.get("data");
-            myOrderList=(List<Map<String,Object>>)dataMap.get("OrderDTODataList");
-            myOrder = myOrderList.get(0);
-            myOrder = ((List<Map<String,Object>>)myOrder.get("tickets")).get(0);
-            logger.info("获取用户订单信息完成"+responseBody);
+            HttpEntity entity = response.getEntity();
+            String responseBody = EntityUtils.toString(entity);
+            rsmap = jsonBinder.fromJson(responseBody, Map.class);
+            if (null!= rsmap && rsmap.get("status").toString().equalsIgnoreCase("true")) {
+                Map<String,Object> dataMap = (Map<String,Object>)rsmap.get("data");
+                myOrderList=(List<Map<String,Object>>)dataMap.get("OrderDTODataList");
+                myOrder = myOrderList.get(0);
+                myOrder = ((List<Map<String,Object>>)myOrder.get("tickets")).get(0);
+                logger.info("获取用户订单信息完成"+responseBody);
 
-        } else {
-            logger.info("获取用户订单信息失败"+responseBody);
-        }
-    }catch (Exception e){
-        logger.info("获取用户乘订单息失败1");
-        e.printStackTrace();
-    }finally {
-        try{
-            response.close();
+            } else {
+                logger.info("获取用户订单信息失败"+responseBody);
+            }
         }catch (Exception e){
+            logger.info("获取用户乘订单息失败1");
+            e.printStackTrace();
+        }finally {
+            try{
+                response.close();
+            }catch (Exception e){
 
+            }
         }
+        return myOrder;
     }
-    return myOrder;
-}
 
     public String resginTicket(Map<String,Object> orderMap,Header[] headers){
         CloseableHttpResponse response=null;
@@ -428,7 +428,7 @@ public Map<String,Object> queryMyOrder(Header[] headers){
             int x=e.getX();
             int y=e.getY();
             bookRancode+=bookRancode.equals("")?x+","+(y-30):","+x+","+(y-30);
-           logger.info(x+","+y+"  rancode:"+bookRancode);
+            logger.info(x+","+y+"  rancode:"+bookRancode);
         }
     }
 
@@ -444,22 +444,22 @@ public Map<String,Object> queryMyOrder(Header[] headers){
         CloseableHttpResponse response=null;
         List<Map<String,String>> users =null;
         try {
-        HttpUriRequest checkCode = RequestBuilder.post()
-                .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/getPassengerDTOs"))
-                .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                .addHeader(headers[7])
-                .addParameter("REPEAT_SUBMIT_TOKEN", token)
-                .addParameter("_json_att", "")
-                .build();
-        response = httpclient.execute(checkCode);
+            HttpUriRequest checkCode = RequestBuilder.post()
+                    .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/getPassengerDTOs"))
+                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
+                    .addHeader(headers[7])
+                    .addParameter("REPEAT_SUBMIT_TOKEN", token)
+                    .addParameter("_json_att", "")
+                    .build();
+            response = httpclient.execute(checkCode);
 
-        Map<String, Object> rsmap = null;
+            Map<String, Object> rsmap = null;
 
             HttpEntity entity = response.getEntity();
             String responseBody = EntityUtils.toString(entity);
             rsmap = jsonBinder.fromJson(responseBody, Map.class);
             if (null!= rsmap && rsmap.get("status").toString().equalsIgnoreCase("true")) {
-               Map<String,Object> dataMap = (Map<String,Object>)rsmap.get("data");
+                Map<String,Object> dataMap = (Map<String,Object>)rsmap.get("data");
                /*
                 code	10
                 passenger_name	张无忌
@@ -483,24 +483,21 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                 total_times	99
                 index_id	0
                 */
-               users=(List<Map<String,String>>)dataMap.get("normal_passengers");
-               logger.info("获取用户乘客信息完成"+responseBody);
+                users=(List<Map<String,String>>)dataMap.get("normal_passengers");
+                logger.info("获取用户乘客信息完成"+responseBody);
 
             } else {
-               logger.info("获取用户乘客信息失败"+responseBody);
+                logger.info("获取用户乘客信息失败"+responseBody);
             }
         }catch (Exception e){
-           logger.info("获取用户乘客信息失败1");
+            logger.info("获取用户乘客信息失败1");
             e.printStackTrace();
         }finally {
             try{
-            response.close();
+                response.close();
             }catch (Exception e){
 
             }
-        }
-        if(null== users || users.size()==0){
-            users = commonUtil.getUserInfoList();
         }
         return users;
     }
@@ -514,14 +511,14 @@ public Map<String,Object> queryMyOrder(Header[] headers){
         CloseableHttpResponse response=null;
         try {
             List<Map<String,String>> userList =getPassenger("");
-            String[] users =commonUtil.getUser().split(",");
+            String[] users = commonUtil.getPassengerNames().split(",");
             String oldPassengerStr="";//姓名，证件类别，证件号码，用户类型
             String passengerTicketStr="";//座位类型，0，车票类型，姓名，身份正号，电话，N（多个的话，以逗号分隔）
             for(Map<String,String> u:userList){
                 for(String u1:users){
                     if(u1.equals(u.get("passenger_name"))){
                         oldPassengerStr+=u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("passenger_type")+"_";
-                        passengerTicketStr+=CommonUtil.seatMap.get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",N_";
+                        passengerTicketStr+= commonUtil.getSeatMap().get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",N_";
                     }
                 }
             }
@@ -535,11 +532,11 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                     .addParameter("oldPassengerStr", oldPassengerStr)
                     .addParameter("passengerTicketStr", passengerTicketStr)
                     .addParameter("purpose_codes", "ADULT")
-                    .addParameter("query_from_station_name", commonUtil.getFrom())
-                    .addParameter("query_to_station_name", commonUtil.getTo())
+                    .addParameter("query_from_station_name", commonUtil.getBuyFrom())
+                    .addParameter("query_to_station_name", commonUtil.getBuyTo())
                     .addParameter("secretStr",  secretStr)
                     .addParameter("tour_flag",  "gc")
-                    .addParameter("train_date",  commonUtil.getDate())
+                    .addParameter("train_date",  commonUtil.getBuyDate())
                     .build();
             response = httpclient.execute(autoSubmi);
 
@@ -561,12 +558,12 @@ public Map<String,Object> queryMyOrder(Header[] headers){
 
 
             } else {
-               logger.info("自动预订失败");
+                logger.info("自动预订失败");
                 flag=false;
             }
         }catch (Exception e){
             flag=false;
-           logger.info("自动预订出错");
+            logger.info("自动预订出错");
             e.printStackTrace();
         }finally {
             try{
@@ -588,24 +585,24 @@ public Map<String,Object> queryMyOrder(Header[] headers){
         try{
 
 
-        HttpUriRequest checkUser = RequestBuilder.post()
-                .setUri(new URI("https://"+ct.hosts+"/otn/login/checkUser"))
-                .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                .addParameter("_json_att", "")
-                .build();
-        response = httpclient.execute(checkUser);
+            HttpUriRequest checkUser = RequestBuilder.post()
+                    .setUri(new URI("https://"+ct.hosts+"/otn/login/checkUser"))
+                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
+                    .addParameter("_json_att", "")
+                    .build();
+            response = httpclient.execute(checkUser);
 
-        Map<String, Object> rsmap = null;
+            Map<String, Object> rsmap = null;
 
-        HttpEntity entity = response.getEntity();
-        rsmap = jsonBinder.fromJson(EntityUtils.toString(entity), Map.class);
+            HttpEntity entity = response.getEntity();
+            rsmap = jsonBinder.fromJson(EntityUtils.toString(entity), Map.class);
             if (rsmap.get("status").toString().equals("true")) {
                 Map<String,Object> dataMap = (Map<String,Object>)rsmap.get("data");
-               return (boolean) dataMap.get("flag");
+                return (boolean) dataMap.get("flag");
 
             }
         }catch (Exception e){
-           logger.info("檢查用戶狀態失敗");
+            logger.info("檢查用戶狀態失敗");
             e.printStackTrace();
         }finally {
             try{
@@ -636,16 +633,16 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                     .setUri(new URI("https://"+ct.hosts+"/otn/leftTicket/submitOrderRequest"))
                     .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
                     .addHeader(headera)
-                    .addParameter("back_train_date", commonUtil.getDate())
+                    .addParameter("back_train_date", commonUtil.getBuyDate())
                     .addParameter("purpose_codes", "ADULT")
-//                    .addParameter("query_from_station_name", URLEncoder.encode(commonUtil.getFrom(),"utf-8"))
-//                    .addParameter("query_to_station_name",  URLEncoder.encode(commonUtil.getTo(),"utf-8"))
-                    .addParameter("query_from_station_name", commonUtil.getFrom())
-                    .addParameter("query_to_station_name",  commonUtil.getTo())
+//                    .addParameter("query_from_station_name", URLEncoder.encode(commonUtil.getBuyFrom(),"utf-8"))
+//                    .addParameter("query_to_station_name",  URLEncoder.encode(commonUtil.getBuyTo(),"utf-8"))
+                    .addParameter("query_from_station_name", commonUtil.getBuyFrom())
+                    .addParameter("query_to_station_name",  commonUtil.getBuyTo())
                     .addParameter("secretStr", secretStr)
 //                    .addParameter("secretStr",  URLEncoder.encode(secretStr,"utf-8"))
                     .addParameter("tour_flag", "gc")
-                    .addParameter("train_date", commonUtil.getDate())
+                    .addParameter("train_date", commonUtil.getBuyDate())
                     .addParameter("undefined", "")
                     .build();
             response = httpclient.execute(checkUser);
@@ -657,26 +654,26 @@ public Map<String,Object> queryMyOrder(Header[] headers){
             if (!"".equals(responseBody)){
                 rsmap = jsonBinder.fromJson(responseBody, Map.class);
 //           logger.info("预定时候出错了？："+responseBody);
-            if (null != rsmap.get("status") && rsmap.get("status").toString().equals("true")) {
-               logger.info("点击预定按钮成功：" + responseBody);
-                return 1;
+                if (null != rsmap.get("status") && rsmap.get("status").toString().equals("true")) {
+                    logger.info("点击预定按钮成功：" + responseBody);
+                    return 1;
 
-            } else if (null != rsmap.get("status") && rsmap.get("status").toString().equals("false")) {
-                String errMsg = rsmap.get("messages") + "";
-                logger.info(errMsg);
-                if (errMsg.contains("未处理的订单")) {
+                } else if (null != rsmap.get("status") && rsmap.get("status").toString().equals("false")) {
+                    String errMsg = rsmap.get("messages") + "";
+                    logger.info(errMsg);
+                    if (errMsg.contains("未处理的订单")) {
 //                    new TipTest("","","您有未处理订单，请查询");
-                    logger.info("您有未完成订单，请处理");
-                    ct.sendSuccessMail("您有未完成订单，请处理");
-                    System.exit(0);
-                } else if (errMsg.contains("当前时间不可以订票")) {
-                    logger.info("系统维护时间不能订票");
-                    System.exit(0);
+                        logger.info("您有未完成订单，请处理");
+                        ct.sendSuccessMail("您有未完成订单，请处理");
+                        System.exit(0);
+                    } else if (errMsg.contains("当前时间不可以订票")) {
+                        logger.info("系统维护时间不能订票");
+                        System.exit(0);
+                    }
+                } else {
+                    logger.info("预定时候出错了：" + responseBody);
                 }
-            } else {
-                logger.info("预定时候出错了：" + responseBody);
-            }
-        }else{
+            }else{
                 logger.info("点击预定按钮失败了，查看是否被禁或者已经退出登陆");
                 return 2;
             }
@@ -716,7 +713,7 @@ public Map<String,Object> queryMyOrder(Header[] headers){
             if(response.getStatusLine().getStatusCode()==200){
                 HttpEntity entity = response.getEntity();
                 responseBody =EntityUtils.toString(entity);
-               logger.info("initGc成功");
+                logger.info("initGc成功");
                 Pattern p=Pattern.compile("globalRepeatSubmitToken \\= '(.*?)';");
                 Matcher m=p.matcher(responseBody);
                 while(m.find()){
@@ -729,11 +726,11 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                 }
                 this.headers[2] = new BasicHeader("Referer","https://kyfw.12306.cn/otn/confirmPassenger/initGc");
             }else{
-               logger.info("initGc失败 status错误");
+                logger.info("initGc失败 status错误");
             }
 
         }catch (Exception e){
-           logger.info("initGc失败"+responseBody);
+            logger.info("initGc失败"+responseBody);
             e.printStackTrace();
         }finally {
             try{
@@ -759,7 +756,7 @@ public Map<String,Object> queryMyOrder(Header[] headers){
         try{
 
             List<Map<String,String>> userList =getPassenger("");
-            String[] users =commonUtil.getUser().split(",");
+            String[] users = commonUtil.getPassengerNames().split(",");
             String oldPassengerStr="";//姓名，证件类别，证件号码，用户类型
             String passengerTicketStr="";//座位类型，0，车票类型，姓名，身份正号，电话，N（多个的话，以逗号分隔）
             for(Map<String,String> u:userList){
@@ -767,7 +764,7 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                     if(u1.equals(u.get("passenger_name"))){
 //                        oldPassengerStr+=u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("passenger_type")+"_";
                         oldPassengerStr+=u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+",_";
-                        passengerTicketStr+=CommonUtil.seatMap.get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",Y_";
+                        passengerTicketStr+= commonUtil.getSeatMap().get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",Y_";
                     }
                 }
             }
@@ -819,13 +816,13 @@ public Map<String,Object> queryMyOrder(Header[] headers){
 
 
             } else {
-               logger.info("选择乘客提交订单失败"+responseBody);
-               logger.info("选择乘客提交订单失败"+rsmap.get("status")+" "+rsmap.get("messages"));
+                logger.info("选择乘客提交订单失败"+responseBody);
+                logger.info("选择乘客提交订单失败"+rsmap.get("status")+" "+rsmap.get("messages"));
                 rs="X";
             }
 
         }catch (Exception e){
-           logger.info("选择乘客提交订单失败"+responseBody);
+            logger.info("选择乘客提交订单失败"+responseBody);
             e.printStackTrace();
             rs="X";
         }finally {
@@ -858,9 +855,9 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                     .addParameter("leftTicket", map.get("leftTicket"))
                     .addParameter("purpose_codes", "00")
                     .addParameter("REPEAT_SUBMIT_TOKEN", token)
-                    .addParameter("seatType", CommonUtil.seatMap.get(map.get("toBuySeat")))
+                    .addParameter("seatType", commonUtil.getSeatMap().get(map.get("toBuySeat")))
                     .addParameter("stationTrainCode", map.get("chehao"))
-                    .addParameter("train_date", getGMT(commonUtil.getDate()))//时间格式待定 Sun+Feb+25+2018+00:00:00+GMT+0800
+                    .addParameter("train_date", getGMT(commonUtil.getBuyDate()))//时间格式待定 Sun+Feb+25+2018+00:00:00+GMT+0800
                     .addParameter("train_location", map.get("train_location"))
                     .addParameter("train_no", map.get("train_no"))
                     .addParameter("_json_att", "")
@@ -873,20 +870,28 @@ public Map<String,Object> queryMyOrder(Header[] headers){
             if(response.getStatusLine().getStatusCode()==200){
 
                 responseBody =EntityUtils.toString(entity);
-               logger.info("查询排队和余票成功"+responseBody);
+                logger.info("查询排队和余票成功"+responseBody);
                 Map<String, Object> rsmap = jsonBinder.fromJson(responseBody, Map.class);
                 if (rsmap.get("status").toString().equals("true")) {
                     Map<String, Object> data=(Map<String, Object>)rsmap.get("data");
+                    String ticket = String.valueOf(data.get("ticket"));
+                    int yp = Integer.valueOf(ticket.split(",")[0]);
+                    int wzyp =  Integer.valueOf(ticket.split(",")[1]);
+                    /**
+                     * countT 排队人数 目前排队人数 countT人，请确认以上信息是否正确，点击确认后，系统将为您随机分配席位<br/>
+                     * op_2 true:目前排队人数已经超过余票张数，请您选择其他席别或车次
+                     * */
+                    logger.info("该车次还有余票：{}张，无座余票：{}张",yp,wzyp);
                     //他们的代码没有加余票是否够买 我也先不加了
                     String yupiao = data.get("")+"";
                 }
 
             }else{
-               logger.info("查询排队和余票失败");
+                logger.info("查询排队和余票失败");
             }
 
         }catch (Exception e){
-           logger.info("查询排队和余票失败"+responseBody);
+            logger.info("查询排队和余票失败"+responseBody);
             e.printStackTrace();
         }finally {
             try{
@@ -934,7 +939,7 @@ public Map<String,Object> queryMyOrder(Header[] headers){
         String  responseBody="";
         try{
             List<Map<String,String>> userList =getPassenger("");
-            String[] users =commonUtil.getUser().split(",");
+            String[] users = commonUtil.getPassengerNames().split(",");
             String oldPassengerStr="";//姓名，证件类别，证件号码，用户类型
             String passengerTicketStr="";//座位类型，0，车票类型，姓名，身份正号，电话，N（多个的话，以逗号分隔）
             for(Map<String,String> u:userList){
@@ -942,7 +947,7 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                     if(u1.equals(u.get("passenger_name"))){
 //                        oldPassengerStr+=u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("passenger_type")+"_";
                         oldPassengerStr+=u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+",_";
-                        passengerTicketStr+=CommonUtil.seatMap.get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",Y_";
+                        passengerTicketStr+= commonUtil.getSeatMap().get(seat)+",0,1,"+u.get("passenger_name")+","+u.get("passenger_id_type_code")+","+u.get("passenger_id_no")+","+u.get("mobile_no")+",Y_";
                     }
                 }
             }
@@ -978,26 +983,26 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                     Map<String, Object> data=(Map<String, Object>)rsmap.get("data");
                     String subStatus = data.get("submitStatus")+"";//true为成功 false为失败 需要查看errMsg
                     if(subStatus.equals("true")){
-                       logger.info("确认提交订单成功"+responseBody);
-                       return true;
+                        logger.info("确认提交订单成功"+responseBody);
+                        return true;
                     }else{
                         String errMsg =data.get("errMsg")+"";
-                       logger.info("确认提交订单失败"+errMsg+" 返回内容："+responseBody);
-                       return false;
+                        logger.info("确认提交订单失败"+errMsg+" 返回内容："+responseBody);
+                        return false;
                     }
 //                   logger.info("确认提交订单成功"+responseBody);
                 }else{
-                   logger.info("确认提交订单失败"+responseBody);
-                   return false;
+                    logger.info("确认提交订单失败"+responseBody);
+                    return false;
                 }
 
             }else{
-               logger.info("确认提交订单失败"+responseBody);
+                logger.info("确认提交订单失败"+responseBody);
                 return false;
             }
 
         }catch (Exception e){
-           logger.info("确认提交订单失败"+responseBody);
+            logger.info("确认提交订单失败"+responseBody);
             e.printStackTrace();
         }finally {
             try{
@@ -1026,36 +1031,36 @@ public Map<String,Object> queryMyOrder(Header[] headers){
                 HttpEntity entity = response.getEntity();
                 String responseBody = EntityUtils.toString(entity);
                 Map<String, Object> rsmap = jsonBinder.fromJson(responseBody, Map.class);
-               if (rsmap.get("status").toString().equals("true")) {
+                if (rsmap.get("status").toString().equals("true")) {
                     Map<String, Object> data = (Map<String, Object>) rsmap.get("data");
                     waitTime = data.get("waitTime") + "";
                     String waitCount = data.get("waitCount") + "";
                     orderId = null==data.get("orderId")?"":String.valueOf(data.get("orderId")) ;
-                   logger.info("前面" + waitCount + "人，需等待：" + waitTime + "");
+                    logger.info("前面" + waitCount + "人，需等待：" + waitTime + "");
                     message = data.get("msg") + "";
-                   if(null!=message){//已有订单
-                       if(message.toString().contains("行程冲突")){
-                           logger.info(message.toString());
-                           ct.sendSuccessMail("行程冲突");
-                           System.exit(0);
-                       }
-                       if(message.toString().contains("取消次数过多")){
-                           logger.info(message.toString());
-                           ct.sendSuccessMail("取消次数过多,请切换账号");
-                           System.exit(0);
-                       }
-                       logger.info("dddddd"+data.get("msg"));
-                       //只打印消息 继续从queue里获取其他票 尝试下单
+                    if(null!=message){//已有订单
+                        if(message.toString().contains("行程冲突")){
+                            logger.info(message.toString());
+                            ct.sendSuccessMail("行程冲突");
+                            System.exit(0);
+                        }
+                        if(message.toString().contains("取消次数过多")){
+                            logger.info(message.toString());
+                            ct.sendSuccessMail("取消次数过多,请切换账号");
+                            System.exit(0);
+                        }
+                        logger.info("dddddd"+data.get("msg"));
+                        //只打印消息 继续从queue里获取其他票 尝试下单
 //                        System.exit(0);
-                   }
+                    }
                     Thread.sleep(1000);
                 }
             }
             if(orderId.equals("")){
-               logger.info("获取订单号失败："+message);
+                logger.info("获取订单号失败："+message);
             }
         } catch (Exception e) {
-           logger.info("查询订单号失败");
+            logger.info("查询订单号失败");
             e.printStackTrace();
         }
         return orderId;

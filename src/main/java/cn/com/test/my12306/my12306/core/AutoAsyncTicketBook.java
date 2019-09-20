@@ -70,7 +70,7 @@ import java.util.concurrent.BlockingQueue;
  * 功能同AutoTicketBook,只是使用不同的实现方式（使用Spring Boot的@Async实现）
  */
 @Component
-public class AsyncTicketBook {
+public class AutoAsyncTicketBook {
 
     public JsonBinder jsonBinder = JsonBinder.buildNonNullBinder(false);
 
@@ -84,7 +84,7 @@ public class AsyncTicketBook {
     @Autowired
     private CommonUtil commonUtil;
     private String bookRancode="";
-    private static Logger logger = LogManager.getLogger(AsyncTicketBook.class);
+    private static Logger logger = LogManager.getLogger(AutoAsyncTicketBook.class);
 
 
     public void resetHeaders(){
@@ -117,9 +117,8 @@ public class AsyncTicketBook {
                 logger.info("有票了，开始预定");
                 //校验是否登陆
                 ct.checkOnlineStatus(null);
+
                 Map<String, String> subMap = autoSubmi(trainMap.get("secret"), trainMap.get("toBuySeat"));
-//                Map<String, String> subMap = new HashMap<>();
-//                subMap.put("ifShowPassCode","N");
                 if (subMap.size() > 0) {
                     if (subMap.get("ifShowPassCode").equals("Y")) {
                         StringBuffer saveStr = new StringBuffer(System.currentTimeMillis()+" bookTickets:")
@@ -171,10 +170,9 @@ public class AsyncTicketBook {
                         }
                     }
                     //获取余票数
-                    /*logger.info("start to sleep");
+                    logger.info("start to sleep");
                     commonSleep(3,Integer.valueOf(subMap.get("ifShowPassCodeTime"))/3);
-                    logger.info("end to sleep");*/
-                    Thread.sleep(500);
+                    logger.info("end to sleep");
                     int tickets = getQueueCountAsync(trainMap);
                     Thread.sleep(100);
 
@@ -412,6 +410,7 @@ public class AsyncTicketBook {
                 passengerTicketStr = passengerTicketStr.replaceAll("\\{seatType\\}", commonUtil.getSeatMap().get(seat));
                 logger.info("替换后：{}",passengerTicketStr);
             }
+            passengerTicketStr=passengerTicketStr.endsWith("_")?passengerTicketStr.substring(0,passengerTicketStr.length()-1):passengerTicketStr;
             HttpUriRequest autoSubmi = RequestBuilder.post()
 //                    .setUri(new URI("https://kyfw.12306.cn/otn/confirmPassenger/autoSubmitOrderRequest"))
                     .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/autoSubmitOrderRequest"))
@@ -654,8 +653,6 @@ public class AsyncTicketBook {
         int tickets = 0;
         String responseBody ="";
         try{
-            String chehao = map.get("chehao");
-            String tobuySeat = map.get("toBuySeat");
             Header headerAjax = new BasicHeader("X-Requested-With", "XMLHttpRequest");
             Header headercache = new BasicHeader("Cache-Control","no-cache");
             HttpUriRequest confirm = RequestBuilder.post()
@@ -692,21 +689,14 @@ public class AsyncTicketBook {
                     data.count=排队人数
                     data.ticket=余票数
                      */
-                    String rs = rsMap.get("ticket").toString().replaceAll(",","");
                     String ticket = String.valueOf(rsMap.get("ticket"));
                     int yp = Integer.valueOf(ticket.split(",")[0]);
                     int wzyp =  Integer.valueOf(ticket.split(",")[1]);
                     logger.info("该车次还有余票：{}张，无座余票：{}张",yp,wzyp);
                     tickets = yp;
-                    if(tickets>0){
-                        return tickets;
-                    }else{
-                        ct.getBlackMap().put(chehao+"_"+tobuySeat,System.currentTimeMillis()+60*1000);
-                    }
                 }
             }else{
                 logger.info("查询排队和余票失败11111");
-                ct.getBlackMap().put(chehao+"_"+tobuySeat,System.currentTimeMillis()+60*1000);
             }
 
         }catch (Exception e){
@@ -756,6 +746,7 @@ public class AsyncTicketBook {
                 passengerTicketStr = passengerTicketStr.replaceAll("\\{seatType\\}", commonUtil.getSeatMap().get(seat));
                 logger.info("替换后：{}",passengerTicketStr);
             }
+
             //下单重试3次
 
             for(int i=0;i<3;i++){
@@ -828,12 +819,12 @@ public class AsyncTicketBook {
         }
         return returnFlag;
     }
-
     public String getOldPassengerStr(){
         return ct.getPassengerStrMap().get("oldPassengerStr");
     }
     public String getpassengerTicketStr(){
         return ct.getPassengerStrMap().get("passengerTicketStr");
     }
+
 
 }
