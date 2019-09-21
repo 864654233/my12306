@@ -30,6 +30,7 @@ import org.apache.http.HttpHost;
 import org.apache.http.NoHttpResponseException;
 import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -49,6 +50,10 @@ public class TicketHttpClient {
     private static Logger logger = LogManager.getLogger(TicketHttpClient.class);
 
     public static CloseableHttpClient getClient() {
+        return getClient(null);
+    }
+
+    public static CloseableHttpClient getClient(BasicCookieStore cookieStore) {
         CloseableHttpClient httpClient = null;
         try {
             HttpClientBuilder httpClientBuilder = HttpClientBuilder.create();
@@ -82,6 +87,9 @@ public class TicketHttpClient {
                 }
                 return false;
             });*/
+            if(null!=cookieStore){
+                httpClientBuilder.setDefaultCookieStore(cookieStore);
+            }
             httpClientBuilder.setSSLHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
             httpClient = httpClientBuilder.build();
         } catch (Exception e) {
@@ -91,6 +99,10 @@ public class TicketHttpClient {
     }
 
     public static CloseableHttpClient getRetryClient() {
+        return getRetryClient(null);
+    }
+
+    public static CloseableHttpClient getRetryClient(BasicCookieStore cookieStore) {
         CloseableHttpClient httpClient = null;
         try {
             HttpClientBuilder httpClientBuilder = HttpClientBuilder.create();
@@ -103,6 +115,9 @@ public class TicketHttpClient {
             }).build();
 
             httpClientBuilder = httpClientBuilder.setSSLContext(sslContext);
+            if(null!=cookieStore){
+                httpClientBuilder.setDefaultCookieStore(cookieStore);
+            }
             httpClientBuilder = httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler(3,false));
             httpClientBuilder.setSSLHostnameVerifier(SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
 //            httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler());

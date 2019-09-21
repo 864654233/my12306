@@ -843,12 +843,17 @@ public class TicketBook implements  Runnable{
                     Map<String, Object> data=(Map<String, Object>)rsmap.get("data");
                     String ticket = String.valueOf(data.get("ticket"));
                     String countT = String.valueOf(data.get("countT"));
+                    String op_2 = String.valueOf(data.get("op_2"));
                     seatsNum = Integer.valueOf(ticket.split(",")[0]);
                     int wzyp = 0;
                     if(ticket.contains(",")){
                         wzyp = Integer.valueOf(ticket.split(",")[1]);
                     }
-                    logger.info("该车次还有余票：{}张，无座余票：{}张,你排在{}位",seatsNum,wzyp,countT);
+                    logger.info("该车次还有余票：{}张，无座余票：{}张,排队人数{}位",seatsNum,wzyp,countT);
+                    if(op_2.equalsIgnoreCase("true")){
+                        logger.info("目前排队人数已经超过余票张数，请您选择其他席别或车次。");
+                        ct.getBlackMap().put(chehao+"_"+tobuySeat,System.currentTimeMillis()+60*1000);
+                    }
                     //他们的代码没有加余票是否够买 我也先不加了
                     String yupiao = data.get("")+"";
                     if(seatsNum>0){

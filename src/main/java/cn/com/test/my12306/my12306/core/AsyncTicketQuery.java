@@ -28,6 +28,7 @@ package cn.com.test.my12306.my12306.core;
 
 import cn.com.test.my12306.my12306.core.proxy.ProxyUtil;
 import cn.com.test.my12306.my12306.core.util.FileUtil;
+import cn.com.test.my12306.my12306.core.util.JsUtil;
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
@@ -36,7 +37,9 @@ import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ConnectTimeoutException;
+import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.cookie.BasicClientCookie;
 import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,16 +124,25 @@ public class AsyncTicketQuery {
                     ct.nullCount.set(0);
                     ct.queryInit(null);
                 }
+
+                String fromCode = commonUtil.getFromCode();
+                String toCode = commonUtil.getToCode();
+
+                BasicCookieStore cookieStore = genCookie(fromCode,toCode);
+
                 if(commonUtil.isCdnDone()){
-                    httpClient = TicketHttpClient.getRetryClient();
+                    httpClient = TicketHttpClient.getRetryClient(cookieStore);
                 }else{
-                    httpClient = TicketHttpClient.getClient();
+                    httpClient = TicketHttpClient.getClient(cookieStore);
                 }
+
+
 
                 String queryIp = commonUtil.getUseProxy()==1 && proxyUtil.getProxySize()>=8?"kyfw.12306.cn": commonUtil.getIp();
 //            String queryIp = commonUtil.getIp();
 //            ct.setLeftTicketUrl("leftTicket/queryA");
-                String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+ commonUtil.getBuyDate()+"&leftTicketDTO.from_station="+ commonUtil.getFromCode()+"&leftTicketDTO.to_station="+ commonUtil.getToCode()+"&purpose_codes=ADULT";
+
+                String urlStr = "http://"+queryIp+"/otn/"+ct.getLeftTicketUrl()+"?leftTicketDTO.train_date="+ commonUtil.getBuyDate()+"&leftTicketDTO.from_station="+fromCode+"&leftTicketDTO.to_station="+toCode+"&purpose_codes=ADULT";
 //            logger.info("url:{}",urlStr);
                 HttpGet httpget = new HttpGet(urlStr);
                 httpget.setHeader("Host", "kyfw.12306.cn");//设置host
@@ -140,10 +152,11 @@ public class AsyncTicketQuery {
 //                httpget.setHeader("Content-Type", "application/x-www-form-urlencoded");
                 httpget.setConfig(requestConfig);
 //                ct.httpclient
-            HttpResponse response =  ct.httpclient.execute(httpget);
-//                HttpResponse response =  httpClient.execute(httpget);
+//            HttpResponse response =  ct.httpclient.execute(httpget);
+                HttpResponse response =  httpClient.execute(httpget);
                 HttpEntity entity = response.getEntity();
-                if(response.getStatusLine().getStatusCode()!=200){
+                int statusCode = response.getStatusLine().getStatusCode();
+                if(statusCode!=200){
                     logger.info("查询错误：{}，ip:{},statusline:{}",ct.nullCount.get(),queryIp,response.getStatusLine());
                     ct.nullCount.addAndGet(1);
                     ((CloseableHttpResponse) response).close();
@@ -193,7 +206,7 @@ public class AsyncTicketQuery {
                         //有一次查询成功，说明地址还能用
                         ct.nullCount.set(0);
                         commonUtil.setUsefulList(queryIp);
-                        logger.info("==========================={}:查询成功,随机等待{}毫秒,ipSet {}=================",queryIp,a,ct.ipSet.size());
+                        logger.info("==========================={}:查询成功,状态:{},随机等待{}毫秒,ipSet {}=================",queryIp,statusCode,a,ct.ipSet.size());
                         if(ct.ipSet.size()>500){
                             String ips ="";
                             for(String str:ct.ipSet){
@@ -225,6 +238,37 @@ public class AsyncTicketQuery {
             }
 
         }
+
+    }
+
+    public BasicCookieStore genCookie(String fromCode,String toCode){
+        BasicCookieStore cookieStore = new BasicCookieStore();
+        BasicClientCookie _jc_save_fromStation = new BasicClientCookie("_jc_save_fromStation",JsUtil.escape(commonUtil.getStationMap().get(fromCode)+","+fromCode));
+        _jc_save_fromStation.setDomain("kyfw.12306.cn");
+        _jc_save_fromStation.setPath("/");
+
+        BasicClientCookie _jc_save_toStation = new BasicClientCookie("_jc_save_toStation",JsUtil.escape(commonUtil.getStationMap().get(toCode)+","+toCode));
+        _jc_save_toStation.setDomain("kyfw.12306.cn");
+        _jc_save_toStation.setPath("/");
+
+        BasicClientCookie _jc_save_fromDate = new BasicClientCookie("_jc_save_fromDate",commonUtil.getBuyDate());
+        _jc_save_fromDate.setDomain("kyfw.12306.cn");
+        _jc_save_fromDate.setPath("/");
+
+        BasicClientCookie _jc_save_toDate = new BasicClientCookie("_jc_save_toDate",commonUtil.getToday());
+        _jc_save_toDate.setDomain("kyfw.12306.cn");
+        _jc_save_toDate.setPath("/");
+
+        BasicClientCookie _jc_save_wfdc_flag = new BasicClientCookie("_jc_save_wfdc_flag","dc");
+        _jc_save_wfdc_flag.setDomain("kyfw.12306.cn");
+        _jc_save_wfdc_flag.setPath("/");
+
+        cookieStore.addCookie(_jc_save_fromStation);
+        cookieStore.addCookie(_jc_save_toStation);
+        cookieStore.addCookie(_jc_save_fromDate);
+        cookieStore.addCookie(_jc_save_toDate);
+        cookieStore.addCookie(_jc_save_wfdc_flag);
+        return cookieStore;
 
     }
 

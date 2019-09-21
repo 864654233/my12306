@@ -116,7 +116,8 @@ public class CommonUtil {
         String[] toArr = BuyTo.split(",");
         for(int i=0;i<stations.length;i++){
             String[] snames=stations[i].split(":");
-            stationMap.put(snames[0],snames[1]);
+//            stationMap.put(snames[0],snames[1]);
+            stationMap.put(snames[1],snames[0]);
             if(snames[0].contains(BuyFrom)){
                 fromList.add(snames[1]);
             }
@@ -124,8 +125,7 @@ public class CommonUtil {
                 toList.add(snames[1]);
             }
         }
-
-        System.out.println(stationMap.size());
+        logger.info("总共有{}个站点",stationMap.size());
     }
 
 
@@ -195,7 +195,7 @@ public class CommonUtil {
         String ip="kyfw.12306.cn";
         int len = ips.length;
         if(!isCdnDone){
-            while(x.intValue()<len){
+            while(x.intValue()<len-1){
                 x.addAndGet(1);
                 return ips[x.intValue()];
             }

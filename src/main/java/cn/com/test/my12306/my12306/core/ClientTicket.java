@@ -116,7 +116,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
 
     //    public String hosts="kyfw.12306.cn";
-    public String hosts="125.77.130.29";
+    public String hosts="222.163.202.212";
     //    public String hosts="112.90.135.94";
     private String leftTicketUrl = "leftTicket/query";
     ScheduledExecutorService es = null;
@@ -572,22 +572,38 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
         try {
             logger.info("乘车人：{},乘车时间：{},乘车车次：{},席别：{}",commonUtil.getPassengerNames(),commonUtil.getBuyDate(),commonUtil.getToBuyTrains(),commonUtil.getToBuySeat());
-            //初始化页面
+            /**验证已有cookie是否可以直接使用*/
+            readFile2Cookie();
+            Map<String,Object> confMap = conf(null);
+            Map<String,Object> dataMap = Optional.ofNullable(confMap.get("data")).map(x->(Map<String,Object>) x).orElse(null);
+            boolean  isOnline = false;
+            if(null!=dataMap){
+                String name = null==dataMap.get("name")?"":String.valueOf(dataMap.get("name"));
+                if(!StringUtil.isBlank(name)){
+                    isOnline = true;
+                    logger.info("欢迎{}回来",name);
+                }
+            }
             ct.queryInit(headers);//设置查询地址 queryA queryZ
+            if(!isOnline){
 
-            boolean deviceFlag = false;
-            while(!deviceFlag){
-                deviceFlag = ct.getDeviceCookie(headers);
+                boolean deviceFlag = false;
+                while(!deviceFlag){
+                    deviceFlag = ct.getDeviceCookie(headers);
+                }
+
+                //登陆
+               /* boolean loginFlag=true;
+                while( loginFlag){
+                    loginFlag = !login1(headers);
+                }*/
+
+                login1(headers);
+
+                AddCaptchaCookie();
             }
 
-            //登陆
-           /* boolean loginFlag=true;
-            while( loginFlag){
-                loginFlag = !login1(headers);
-            }*/
-
-            login1(headers);
-            //获取passengerTicketStr进行缓存
+            /**获取passengerTicketStr进行缓存*/
             passengerStrMap = ticketUtil.getPassengerStr(headers);
 
             //刷票
@@ -601,7 +617,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 //            ct.queryInit(headers);
 //            ct.getAllCookies(ct.cookieStore);
 //            ct.getCodeByte(headers);
-            AddCaptchaCookie();
+
             for(int i =0;i<10;i++){
                 asyncTicketQuery.run();
             }
@@ -716,24 +732,27 @@ public class ClientTicket /*implements ApplicationRunner*/{
         Header contentLen = new BasicHeader("Content-Length","0");
         Map<String,Object> confMap = new HashMap<String,Object>();
         CloseableHttpResponse responseConf = null;
-        try {
-            String url = headers[1].getValue().equalsIgnoreCase("www.12306.cn")?"/index/otn/login/conf":"/otn/login/conf";
-            url = "/otn/login/conf";
-            HttpUriRequest conf = RequestBuilder.post()
-                    .setUri(new URI("https://"+this.hosts+url))
-                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
-                    .addHeader(contentLen)
-                    .build();
-            responseConf = httpclient.execute(conf);
+        for (int i = 0; i < reTryTimes; i++) {
+            try {
+                String url = headers[1].getValue().equalsIgnoreCase("www.12306.cn") ? "/index/otn/login/conf" : "/otn/login/conf";
+                url = "/otn/login/conf";
+                HttpUriRequest conf = RequestBuilder.post()
+                        .setUri(new URI("https://" + this.hosts + url))
+                        .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
+                        .addHeader(contentLen)
+                        .build();
+                responseConf = httpclient.execute(conf);
 //            setCookieStore(responseConf);
-            HttpEntity entity = responseConf.getEntity();
-            String jsonStr= EntityUtils.toString(entity);
-            logger.info("conf entity:{}",jsonStr);
-            confMap = jsonBinder.fromJson(jsonStr,Map.class);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }finally {
-            closeResponse(responseConf);
+                HttpEntity entity = responseConf.getEntity();
+                String jsonStr = EntityUtils.toString(entity);
+                logger.info("conf entity:{}", jsonStr);
+                confMap = jsonBinder.fromJson(jsonStr, Map.class);
+                break;
+            } catch (Exception e) {
+              logger.error("conf error",e);
+            } finally {
+                closeResponse(responseConf);
+            }
         }
         return confMap;
     }
@@ -840,7 +859,13 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
             CloseableHttpResponse response = null;
             if (commonUtil.getLogonType().equals("1")) {
-                boolean flag = loginQr(headers);
+                mailUtils.send("二维码登录提醒，请扫码登录");
+                /**二维码登录*/
+                boolean logedIn = false;
+                while (!logedIn){
+                    logedIn = loginQr(headers);
+
+                }
                 //防止出现越界
                 headers = new BasicHeader[7];
                 headers[0] = new BasicHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0");
@@ -1393,6 +1418,11 @@ public class ClientTicket /*implements ApplicationRunner*/{
                     result_code =  StringUtils.isEmpty(checkQrMap.get("result_code"))?"":String.valueOf(checkQrMap.get("result_code"));
                     uamtk =  StringUtils.isEmpty(checkQrMap.get("uamtk"))?"":String.valueOf(checkQrMap.get("uamtk"));
                     if(!result_code.equals("2")){
+                        if(result_code.equals("3")){
+                            /**超时 重新获取验证码*/
+                            flag = false;
+                            break;
+                        }
                         try {
                             Thread.sleep(500L);
                         } catch (InterruptedException e) {
@@ -1401,11 +1431,12 @@ public class ClientTicket /*implements ApplicationRunner*/{
                     }else{
                         dialog.setVisible(false);
                         dialog.dispose();
+                        flag = true;
+                        logger.info("二维码登录之后。。。。。。。。。。。。。。。。。。。");
+                        getAllCookies(this.cookieStore );
                     }
                 }
-                flag = true;
-                logger.info("二维码登录之后。。。。。。。。。。。。。。。。。。。");
-                getAllCookies(this.cookieStore);
+
             }
         }
         return flag;
