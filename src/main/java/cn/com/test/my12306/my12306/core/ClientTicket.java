@@ -1428,11 +1428,19 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 String uamtk = "";
                 while(!result_code.equals("2")){
                     Map<String,Object> checkQrMap = checkQr(headers,image,uuid);
+                    if(null==checkQrMap){
+                        dialog.setVisible(false);
+                        dialog.dispose();
+                        flag = false;
+                        break;
+                    }
                     result_code =  StringUtils.isEmpty(checkQrMap.get("result_code"))?"":String.valueOf(checkQrMap.get("result_code"));
                     uamtk =  StringUtils.isEmpty(checkQrMap.get("uamtk"))?"":String.valueOf(checkQrMap.get("uamtk"));
                     if(!result_code.equals("2")){
                         if(result_code.equals("3")){
                             /**超时 重新获取验证码*/
+                            dialog.setVisible(false);
+                            dialog.dispose();
                             flag = false;
                             break;
                         }
@@ -1536,17 +1544,19 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 .setConfig(requestConfig)
                 .build();
         CloseableHttpResponse response = null;
-        try {
-            response = httpclient.execute(checkQr);
-            HttpEntity entity = response.getEntity();
-            String jsonStr= EntityUtils.toString(entity);
-            logger.info("校验二维码结果：{}",jsonStr);
-            map = jsonBinder.fromJson(jsonStr,Map.class);
+        for (int i = 0; i < reTryTimes; i++) {
+            try {
+                response = httpclient.execute(checkQr);
+                HttpEntity entity = response.getEntity();
+                String jsonStr = EntityUtils.toString(entity);
+                logger.info("校验二维码结果：{}", jsonStr);
+                map = jsonBinder.fromJson(jsonStr, Map.class);
 
-        }catch (Exception e){
-            logger.error("校验二维码时出错",e);
-        }finally {
-            closeResponse(response);
+            } catch (Exception e) {
+                logger.error("校验二维码时出错", e);
+            } finally {
+                closeResponse(response);
+            }
         }
 
         return map;
