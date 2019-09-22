@@ -7,6 +7,8 @@ import cn.com.test.my12306.my12306.core.util.FileUtil;
 import cn.com.test.my12306.my12306.core.util.ImageUtil;
 import cn.com.test.my12306.my12306.core.util.JsonBinder;
 import cn.com.test.my12306.my12306.core.util.mail.MailUtils;
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
@@ -28,6 +30,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jsoup.helper.StringUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
@@ -86,6 +89,9 @@ public class ClientTicket /*implements ApplicationRunner*/{
     @Autowired
     AsyncTicketQuery asyncTicketQuery;
 
+    @Value("${logDeviceJsPath}")
+    String logDeviceJsPath;
+
     /*@Autowired
     CaptchaImageForPy captchaImageForPy;*/
 
@@ -108,6 +114,9 @@ public class ClientTicket /*implements ApplicationRunner*/{
 //    private String hosts="121.18.230.86";
     /**小黑屋*/
     private Map<String,Long> blackMap = new ConcurrentHashMap<String,Long>();
+    /**有票的map 替代queue*/
+    @Getter
+    private Map<String,Object> bookMap = new ConcurrentHashMap<String,Object>();
     /**查询为空的总数量，用于判断是否需要重新获取查询地址*/
     public AtomicInteger nullCount = new AtomicInteger(0);
     public Set<String> ipSet = new HashSet<>();
@@ -562,6 +571,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             canRun =true;
         }else{
             logger.info("维护时间，暂停查询");
+            ct.queryInit(null);//设置查询地址 queryA queryZ
             return ;
         }
 
@@ -1226,19 +1236,22 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     public String getLogdeviceUrl(Header[] headers) {
         try {
-            StringBuffer sb = new StringBuffer();
+            /*StringBuffer sb = new StringBuffer();
             FileReader reader = new FileReader(ResourceUtils.getFile("classpath:logdevice.js"));
             BufferedReader br = new BufferedReader(reader);
             String line;
             while ((line = br.readLine()) != null) {
                 sb.append(line + "\n");
-            }
+            }*/
+            String context = FileUtil.readByLines(logDeviceJsPath,true);
             ScriptEngine engine = new ScriptEngineManager().getEngineByName("nashorn");
-            engine.eval(new StringReader(sb.toString()));
+//            engine.eval(new StringReader(sb.toString()));
+            engine.eval(new StringReader(context));
             Invocable invocable = (Invocable) engine;
             String logdevice = (String) invocable.invokeFunction("Test");
             return ("https://"+hosts+ String.format(logdevice, this.algID(headers))).replaceAll(" ", "%20");
         } catch (Exception e) {
+            logger.error("getDeviceJs Error",e);
         }
         return null;
     }

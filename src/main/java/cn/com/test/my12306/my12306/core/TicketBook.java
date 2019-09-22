@@ -49,14 +49,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.SimpleTimeZone;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -132,8 +125,19 @@ public class TicketBook implements  Runnable{
         Map<String,String> map =null;
         try{
             kaishi:
-            while(orderId.equals("") && (map= queue.take())!=null) {
+//            while(orderId.equals("") && (map= queue.take())!=null) {
+            while(orderId.equals("") ) {
+                if (ct.getBookMap().size()==0) {
+                    Thread.sleep(50);
+                    continue ;
+                }
                 resetHeaders();
+                Iterator<Map.Entry<String, Object>> it = ct.getBookMap().entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry<String, Object> entry = it.next();
+                    map = (Map<String, String>) entry.getValue();
+                    it.remove();
+//                }
                 this.headers[2] = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/leftTicket/init");
 
                 ;//获取的整个车次信息
@@ -257,7 +261,7 @@ public class TicketBook implements  Runnable{
                         }
                     }
                 }
-
+            }
             }
 
             Thread.sleep(200L);

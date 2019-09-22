@@ -70,6 +70,34 @@ public class FileUtil {
 		return content;
 	}
 
+	public static String readByLines(String path,boolean changeLine) {
+		String content = null;
+
+
+		try {
+			crateNotExists(path);
+			BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(new FileInputStream(path), "utf-8"));
+
+			StringBuffer sb = new StringBuffer();
+			String temp = null;
+			while ((temp = bufferedReader.readLine()) != null) {
+				sb.append(temp);
+				if(changeLine){
+					sb.append("\n");
+				}
+			}
+
+			content = sb.toString();
+			bufferedReader.close();
+		} catch (UnsupportedEncodingException  e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		return content;
+	}
+
 	/**
 	 * 如果文件不存在则创建
 	 * @param path

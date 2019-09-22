@@ -198,6 +198,7 @@ public class AsyncTicketQuery {
                                     }
                                 }
                                 queue.put(map1);
+                                ct.getBookMap().put(chehao+"_"+tobuySeat,map1);
 
                             }
                         }
