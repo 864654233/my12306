@@ -1203,14 +1203,16 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 RAIL_DEVICEID = map.get("dfp");
                 BasicClientCookie acookie = new BasicClientCookie("RAIL_DEVICEID", map.get("dfp"));
 //            acookie.setDomain(".12306.cn");
-                acookie.setDomain("kyfw.12306.cn");
+//                acookie.setDomain("kyfw.12306.cn");
+                acookie.setDomain(hosts);
                 acookie.setPath("/");
 //            acookie.setExpiryDate( calendar1.getTime());
                 cookieStore.addCookie(acookie);
                 BasicClientCookie bcookie = new BasicClientCookie("RAIL_EXPIRATION", map.get("exp"));
                 RAIL_EXPIRATION = map.get("exp");
 //            bcookie.setDomain(".12306.cn");
-                bcookie.setDomain("kyfw.12306.cn");
+//                bcookie.setDomain("kyfw.12306.cn");
+                bcookie.setDomain(hosts);
                 bcookie.setPath("/");
 //            bcookie.setExpiryDate(calendar1.getTime());
                 cookieStore.addCookie(bcookie);
