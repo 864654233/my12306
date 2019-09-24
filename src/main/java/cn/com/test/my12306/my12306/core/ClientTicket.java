@@ -2,10 +2,7 @@ package cn.com.test.my12306.my12306.core;
 
 import cn.com.test.my12306.my12306.core.proxy.ProxyUtil;
 //import cn.com.test.my12306.my12306.core.util.CaptchaImageForPy;
-import cn.com.test.my12306.my12306.core.util.DateUtil;
-import cn.com.test.my12306.my12306.core.util.FileUtil;
-import cn.com.test.my12306.my12306.core.util.ImageUtil;
-import cn.com.test.my12306.my12306.core.util.JsonBinder;
+import cn.com.test.my12306.my12306.core.util.*;
 import cn.com.test.my12306.my12306.core.util.mail.MailUtils;
 import lombok.Getter;
 import lombok.Setter;
@@ -91,6 +88,9 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
     @Value("${logDeviceJsPath}")
     String logDeviceJsPath;
+
+    @Autowired
+    WebDriverUtil webDriverUtil;
 
     /*@Autowired
     CaptchaImageForPy captchaImageForPy;*/
@@ -224,6 +224,18 @@ public class ClientTicket /*implements ApplicationRunner*/{
             }
         }
         System.out.println("结束获取cookie");
+    }
+
+    public  void cookieTransfer(Set<org.openqa.selenium.Cookie> cookieSet){
+        System.out.println("开始转换cookie");
+        for(org.openqa.selenium.Cookie cookie:cookieSet){
+            BasicClientCookie acookie = new BasicClientCookie(cookie.getName(), cookie.getValue());
+            acookie.setDomain(hosts);
+            acookie.setPath(cookie.getPath());
+            acookie.setExpiryDate(cookie.getExpiry());
+            cookieStore.addCookie(acookie);
+        }
+        System.out.println("结束转换cookie");
     }
 
     public  void logOnCookies(BasicCookieStore cookieStore){
@@ -565,6 +577,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             new Thread( () -> proxyUtil.getProxyIps() ).start();
 //            proxyUtil.getProxyIps();
         }
+
         canRun = false;
         //是否是正常的预定时间
         if(DateUtil.isNormalTime()){
@@ -597,16 +610,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             ct.queryInit(headers);//设置查询地址 queryA queryZ
             if(!isOnline){
 
-                boolean deviceFlag = false;
-                while(!deviceFlag){
-                    deviceFlag = ct.getDeviceCookie(headers);
-                }
 
-                //登陆
-               /* boolean loginFlag=true;
-                while( loginFlag){
-                    loginFlag = !login1(headers);
-                }*/
 
                 login1(headers);
 
@@ -662,14 +666,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
         String thisIp = "";
         int i = 0;
         while( loginFlag){
-           /* if(!thisIp.equalsIgnoreCase(ct.hosts) || i >5 ){
-                i=0;
-                resetHosts();
-                thisIp = ct.hosts;
-            }
-                logger.info("登录使用IP：{}第{}次登录",ct.hosts,i);*/
-
-//            resetHosts();
 
             //验证是否需要验证码
             Map<String, Object> confMap = this.conf(headers);
@@ -786,11 +782,11 @@ public class ClientTicket /*implements ApplicationRunner*/{
                         .setUri(new URI("https://"+this.hosts+"/passport/web/auth/uamtk-static"))
                         .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2])
                         .addHeader(cType)
-//                    .addHeader(accept)
-//                    .addHeader(enCoding)
-//                    .addHeader(cc)
-//                    .addHeader(Origin)
-//                    .addHeader(reqWith)
+                    .addHeader(accept)
+                    .addHeader(enCoding)
+                    .addHeader(cc)
+                    .addHeader(Origin)
+                    .addHeader(reqWith)
                         .addParameter("appid","otn")
                         .build();
 //            ct.getAllCookies(ct.cookieStore);
@@ -843,19 +839,9 @@ public class ClientTicket /*implements ApplicationRunner*/{
                 headers[2] = new BasicHeader("Referer", "https://kyfw.12306.cn/otn/resources/login.html");
             }
 
+            Set<org.openqa.selenium.Cookie> cookies = webDriverUtil.getCookieA();
+            cookieTransfer(cookies);
 
-//            this.getAllCookies(this.cookieStore);
-        /*    logger.info("page inited and start to readFile2Cookie ");
-            //设置一遍cookie
-            readFile2Cookie();
-            logger.info("check online status");*/
-//            getLogInBanner(headers);
-            //设置一遍cookie
-//            readFile2Cookie();
-//            initPage(headers);
-            logOnCookies(ct.cookieStore);
-            initPage(headers);
-            conf(headers);
             Map<String, Object> onlineMap = this.uamtkStatic(headers);
             if (null != onlineMap && onlineMap.size() > 0) {
                 if ("0".equalsIgnoreCase(onlineMap.get("result_code") + "")) {
@@ -900,16 +886,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
                     valicode = this.getCode("", headers);
                     valiCount++;
                 }
-
-//                    onlineMap = this.uamtkStatic(headers);
-                    /*if (null != onlineMap && onlineMap.size() > 0) {
-                        if ("0".equalsIgnoreCase(onlineMap.get("result_code") + "")) {
-                            logger.info("验证时候已经登陆");
-                            return true;
-                        } else {
-                            logger.info("验证时候未登录");
-                        }
-                    }*/
 
                 logger.info("start check code");
                 boolean checkedOver = false;
