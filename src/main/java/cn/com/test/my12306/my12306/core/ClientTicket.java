@@ -224,30 +224,6 @@ public class ClientTicket /*implements ApplicationRunner*/{
         System.out.println("结束转换cookie");
     }
 
-    public  void logOnCookies(BasicCookieStore cookieStore){
-        logger.info("重置cookie");
-        List<Cookie> cookieList = new ArrayList<>();
-        List<Cookie> cookies = cookieStore.getCookies();
-        if (cookies.isEmpty()) {
-            logger.info("None");
-        } else {
-            for (int i = 0; i < cookies.size(); i++) {
-                String key =  cookies.get(i).getName();
-                if(key.equalsIgnoreCase("RAIL_DEVICEID") || key.equalsIgnoreCase("RAIL_EXPIRATION")){
-                    Cookie acookie = cookies.get(i);
-                    cookieList.add(acookie);
-                }
-                System.out.println("- " + cookies.get(i).toString());
-            }
-            if(cookieList.size()==2){
-                Cookie[] newCookie =new Cookie[cookieList.size()];
-                ct.cookieStore.clear();
-                ct.cookieStore.addCookies(cookieList.toArray(newCookie));
-            }
-
-        }
-       logger.info("结束重置cookie size:{}",cookieList.size());
-    }
 
     /**
      * 将cookie写入到文件
@@ -686,7 +662,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
         acookie.setDomain(hosts);
         acookie.setPath("/");
         cookieStore.addCookie(acookie);
-        ct.getAllCookies(ct.cookieStore);
+//        ct.getAllCookies(ct.cookieStore);
     }
 
     /**
@@ -953,7 +929,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
                             .build();
                     boolean notlogedIn = true;
 //                         while(notlogedIn) {
-                    getAllCookies(ct.cookieStore);
+//                    getAllCookies(ct.cookieStore);
                     for(int i=0;i<reTryTimes;i++){
                         Thread.sleep(500);
                         response = httpclient.execute(login);
