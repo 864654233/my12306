@@ -930,6 +930,7 @@ public class TicketBook implements  Runnable{
         CloseableHttpResponse response=null;
         Map<String,Object> rsMap= new HashMap<String,Object>();
         String  responseBody="";
+        boolean flag = false;
         try{
 
             String oldPassengerStr = getOldPassengerStr();
@@ -954,53 +955,56 @@ public class TicketBook implements  Runnable{
                 logger.info("替换后：{}",passengerTicketStr);
             }
 
-            HttpUriRequest confirm = RequestBuilder.post()
-                    .setUri(new URI("https://"+ct.hosts+"/otn/confirmPassenger/confirmSingleForQueue"))
-                    .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
-                    .addParameter("choose_seats", "")
-                    .addParameter("dwAll", "N")
-                    .addParameter("key_check_isChange", key_check_isChange)
-                    .addParameter("leftTicketStr", map.get("leftTicket"))
-                    .addParameter("oldPassengerStr", oldPassengerStr)
-                    .addParameter("passengerTicketStr", passengerTicketStr)
-                    .addParameter("purpose_codes", "00")
-                    .addParameter("randCode", "")
-                    .addParameter("REPEAT_SUBMIT_TOKEN", token)
-                    .addParameter("roomType", "00")
-                    .addParameter("seatDetailType", "000")
-                    .addParameter("train_location", map.get("train_location"))
-                    .addParameter("whatsSelect", "1")
-                    .addParameter("_json_att", "")
-                    .build();
-            response = httpclient.execute(confirm);
+            boolean fail = true;
+
+           while(fail) {
+               HttpUriRequest confirm = RequestBuilder.post()
+                       .setUri(new URI("https://" + ct.hosts + "/otn/confirmPassenger/confirmSingleForQueue"))
+                       .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])
+                       .addParameter("choose_seats", "")
+                       .addParameter("dwAll", "N")
+                       .addParameter("key_check_isChange", key_check_isChange)
+                       .addParameter("leftTicketStr", map.get("leftTicket"))
+                       .addParameter("oldPassengerStr", oldPassengerStr)
+                       .addParameter("passengerTicketStr", passengerTicketStr)
+                       .addParameter("purpose_codes", "00")
+                       .addParameter("randCode", "")
+                       .addParameter("REPEAT_SUBMIT_TOKEN", token)
+                       .addParameter("roomType", "00")
+                       .addParameter("seatDetailType", "000")
+                       .addParameter("train_location", map.get("train_location"))
+                       .addParameter("whatsSelect", "1")
+                       .addParameter("_json_att", "")
+                       .build();
+               response = httpclient.execute(confirm);
 
 
-            HttpEntity entity = response.getEntity();
-            responseBody =EntityUtils.toString(entity);
-            if(response.getStatusLine().getStatusCode()==200){
+               HttpEntity entity = response.getEntity();
+               responseBody = EntityUtils.toString(entity);
+               int statusCode = response.getStatusLine().getStatusCode();
+               if(statusCode!=200){
+                   logger.info("确认提交订单失败，staus：{}" + statusCode);
+                   continue;
+               }
 
-                Map<String, Object> rsmap = jsonBinder.fromJson(responseBody, Map.class);
-                if (rsmap.get("status").toString().equals("true")) {
-                    Map<String, Object> data=(Map<String, Object>)rsmap.get("data");
-                    String subStatus = data.get("submitStatus")+"";//true为成功 false为失败 需要查看errMsg
-                    if(subStatus.equals("true")){
-                        logger.info("确认提交订单成功"+responseBody);
-                        return true;
-                    }else{
-                        String errMsg =data.get("errMsg")+"";
-                        logger.info("确认提交订单失败"+errMsg+" 返回内容："+responseBody);
-                        return false;
-                    }
+                   Map<String, Object> rsmap = jsonBinder.fromJson(responseBody, Map.class);
+                   if (rsmap.get("status").toString().equals("true")) {
+                       Map<String, Object> data = (Map<String, Object>) rsmap.get("data");
+                       String subStatus = data.get("submitStatus") + "";//true为成功 false为失败 需要查看errMsg
+                       if (subStatus.equals("true")) {
+                           logger.info("确认提交订单成功" + responseBody);
+                           flag = true;
+                           break;
+                       } else {
+                           String errMsg = data.get("errMsg") + "";
+                           logger.info("确认提交订单失败" + errMsg + " 返回内容：" + responseBody);
+                       }
 //                   logger.info("确认提交订单成功"+responseBody);
-                }else{
-                    logger.info("确认提交订单失败"+responseBody);
-                    return false;
-                }
+                   } else {
+                       logger.info("确认提交订单失败" + responseBody);
+                   }
 
-            }else{
-                logger.info("确认提交订单失败"+responseBody);
-                return false;
-            }
+           }
 
         }catch (Exception e){
             logger.info("确认提交订单失败"+responseBody);
@@ -1012,7 +1016,7 @@ public class TicketBook implements  Runnable{
 
             }
         }
-        return false;
+        return flag;
     }
 
     public String getOldPassengerStr(){

@@ -1,11 +1,9 @@
 package cn.com.test.my12306.my12306.core;
 
 import cn.com.test.my12306.my12306.core.proxy.ProxyUtil;
-//import cn.com.test.my12306.my12306.core.util.CaptchaImageForPy;
 import cn.com.test.my12306.my12306.core.util.*;
 import cn.com.test.my12306.my12306.core.util.mail.MailUtils;
 import lombok.Getter;
-import lombok.Setter;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
@@ -29,7 +27,6 @@ import org.jsoup.helper.StringUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
 
 import javax.annotation.PreDestroy;
@@ -41,14 +38,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringReader;
+import java.io.*;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.security.cert.CertificateException;
@@ -56,16 +46,12 @@ import java.security.cert.X509Certificate;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+//import cn.com.test.my12306.my12306.core.util.CaptchaImageForPy;
 
 
 @Component
