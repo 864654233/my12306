@@ -119,6 +119,10 @@ public class TicketUtil {
                 Map<String, Object> rsmap = null;
 
                 HttpEntity entity = response.getEntity();
+                int statusCode = response.getStatusLine().getStatusCode();
+                if(statusCode!=200){
+                    continue;
+                }
                 String responseBody = EntityUtils.toString(entity);
                 rsmap = jsonBinder.fromJson(responseBody, Map.class);
                 if (null!= rsmap && rsmap.get("status").toString().equalsIgnoreCase("true")) {

@@ -23,6 +23,8 @@ public class WebDriverUtil {
 
     @Value("${geckodriverPath}")
 	private String geckodriverPath;
+    @Value("${firefoxBinaryPath}")
+    private String firefoxBinaryPath;
 
     @Autowired
     ClientTicket ct;
@@ -36,6 +38,7 @@ public class WebDriverUtil {
         try {
             FirefoxOptions fo = new FirefoxOptions();
             fo.addArguments("--headless");
+            fo.setBinary(firefoxBinaryPath);
             System.setProperty("webdriver.gecko.driver", geckodriverPath);
             webDriver = new FirefoxDriver(fo);
         }catch (Exception e){
