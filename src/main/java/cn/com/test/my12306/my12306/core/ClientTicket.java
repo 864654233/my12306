@@ -785,7 +785,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
         } catch (Exception e) {
             logger.error(e);
         } finally {
-            response3.close();
+            closeResponse(response3);
         }
     }
 
@@ -1609,6 +1609,27 @@ public class ClientTicket /*implements ApplicationRunner*/{
             //重新开启刷票
 //            ct.startQueryThread();
         }else{
+            logger.info("用户仍然在线");
+        }
+    }
+
+    public synchronized void checkOnlineStatus2(Header[] headers) {
+        Map<String, Object> confMap = ct.conf(headers);
+        boolean isOnline = false;
+        if (null != confMap) {
+            Map<String, Object> dataMap = Optional.ofNullable(confMap.get("data")).map(x -> (Map<String, Object>) x).orElse(null);
+            if (null != dataMap) {
+                String name = null == dataMap.get("name") ? "" : String.valueOf(dataMap.get("name"));
+                if (!StringUtil.isBlank(name)) {
+                    isOnline = true;
+                }
+            }
+        }
+        if (!isOnline) {
+            logger.info("检测到已掉线，重新登陆中");
+            ct.login1(null);
+            logger.info("重新登陆已完成");
+        } else {
             logger.info("用户仍然在线");
         }
     }

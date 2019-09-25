@@ -58,7 +58,7 @@ public class ScheduledService {
      */
     @Scheduled(cron="0 0/15 7-22 * * ?")
     public void checkOnline(){
-        ct.checkOnlineStatus(null);
+        ct.checkOnlineStatus2(null);
     }
     /**
      * 早上6点5分每隔15分钟 校验下登陆状态
@@ -66,7 +66,7 @@ public class ScheduledService {
      */
     @Scheduled(cron="0 5/15 6 * * ?")
     public void checkOnline1(){
-        ct.checkOnlineStatus(null);
+        ct.checkOnlineStatus2(null);
     }
 
     /**

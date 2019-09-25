@@ -956,8 +956,8 @@ public class TicketBook implements  Runnable{
             }
 
             boolean fail = true;
-
-           while(fail) {
+            int retryTimes = 5,start = 0;
+           while(fail && start++<retryTimes) {
                HttpUriRequest confirm = RequestBuilder.post()
                        .setUri(new URI("https://" + ct.hosts + "/otn/confirmPassenger/confirmSingleForQueue"))
                        .addHeader(headers[0]).addHeader(headers[1]).addHeader(headers[2]).addHeader(headers[3]).addHeader(headers[4]).addHeader(headers[5]).addHeader(headers[6])

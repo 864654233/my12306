@@ -29,6 +29,10 @@ public class WebDriverUtil {
 
     @PostConstruct
     public void init(){
+        resetWebDriver();
+    }
+
+    public void resetWebDriver(){
         try {
             FirefoxOptions fo = new FirefoxOptions();
             fo.addArguments("--headless");
@@ -39,13 +43,13 @@ public class WebDriverUtil {
         }
     }
 
-    public  Set<Cookie> getCookieA(){
-        webDriver.get("https://kyfw.12306.cn/otn/resources/login.html");
+    public  Set<Cookie> getCookieA() {
         Set<Cookie> cookieSet = null;
-        logger.info("开始获取RAIL_DEVICEID等cookie");
         try {
-
-           cookieSet = webDriver.manage().getCookies();
+            webDriver.manage().deleteAllCookies();
+            logger.info("开始获取RAIL_DEVICEID等cookie");
+            webDriver.get("https://kyfw.12306.cn/otn/resources/login.html");
+            cookieSet = webDriver.manage().getCookies();
             boolean completed = false;
             while (!completed) {
                 for (Cookie cookie : cookieSet) {
@@ -56,11 +60,12 @@ public class WebDriverUtil {
                 Thread.sleep(300L);
                 cookieSet = webDriver.manage().getCookies();
             }
+//            webDriver.close();
         } catch (Exception e) {
-           logger.error("获取cookie失败",e);
+            logger.error("获取cookie失败", e);
+            resetWebDriver();
         }
-        webDriver.close();
-        logger.info("RAIL_DEVICEID cookie信息获取接数");
+        logger.info("RAIL_DEVICEID cookie信息获取结束");
         return cookieSet;
     }
 
