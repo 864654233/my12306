@@ -124,6 +124,10 @@ public class TicketUtil {
                     continue;
                 }
                 String responseBody = EntityUtils.toString(entity);
+                logger.info("获取用户乘客信息完成"+responseBody);
+                if(StringUtils.isBlank(responseBody)){
+                    continue;
+                }
                 rsmap = jsonBinder.fromJson(responseBody, Map.class);
                 if (null!= rsmap && rsmap.get("status").toString().equalsIgnoreCase("true")) {
                     Map<String,Object> dataMap = (Map<String,Object>)rsmap.get("data");
@@ -132,7 +136,6 @@ public class TicketUtil {
                         return null;
                     }
                     users=(List<Map<String,String>>)dataMap.get("normal_passengers");
-                    logger.info("获取用户乘客信息完成"+responseBody);
                     break;
                 } else {
                     logger.info("获取用户乘客信息失败"+responseBody);
