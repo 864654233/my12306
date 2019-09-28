@@ -161,8 +161,6 @@ public class TicketBook implements  Runnable{
                     //确认提交订单信息
                     //选择乘客提交 toBuySeat
                     String rsCode = "B";
-                    redo:
-
                     while (rsCode.equals("B")) {
                         String rs = tijiao(globalRepeatSubmitToken, map.get("toBuySeat"));//Y 需要验证码 N不需要  X预订失败
                         rsCode = rs;
@@ -216,7 +214,7 @@ public class TicketBook implements  Runnable{
                             //预订失败 直接返回
                             logger.info("预定失败 返回X");
                             rsCode = "B";
-                            continue redo;
+                            continue kaishi;
                         }
                     }
                     //getQueue 略

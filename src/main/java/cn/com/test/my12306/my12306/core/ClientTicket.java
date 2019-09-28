@@ -111,7 +111,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
 
     //    public String hosts="kyfw.12306.cn";
-    public String hosts="222.163.202.212";
+    public String hosts="111.62.194.31";
     //    public String hosts="112.90.135.94";
     private String leftTicketUrl = "leftTicket/query";
     ScheduledExecutorService es = null;
@@ -483,6 +483,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
             rsmap = this.jsonBinder.fromJson(content, Map.class);
             String code = rsmap.get("result_code")+"";
             String image =  rsmap.get("image")+"";
+            logger.info("yanzhengma : {}",image);
             if(null!=image){
                 String savePath= commonUtil.getSessionPath()+ commonUtil.getCodePath();
                 File sf=new File(savePath);
@@ -817,7 +818,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
             CloseableHttpResponse response = null;
             if (commonUtil.getLogonType().equals("1")) {
-                mailUtils.send("二维码登录提醒，请扫码登录");
+//                mailUtils.send("二维码登录提醒，请扫码登录");
                 /**二维码登录*/
                 boolean logedIn = false;
                 while (!logedIn){
@@ -871,6 +872,10 @@ public class ClientTicket /*implements ApplicationRunner*/{
 
                     Map<String, String> rsmap = null;
                     try {
+                        int statusCode = response.getStatusLine().getStatusCode();
+                        if(statusCode!=200){
+                            continue;
+                        }
                         HttpEntity entity = response.getEntity();
                         String resStr = EntityUtils.toString(entity);
                         logger.info("校验结果：{}",resStr);
@@ -933,8 +938,11 @@ public class ClientTicket /*implements ApplicationRunner*/{
                     for(int i=0;i<reTryTimes;i++){
                         Thread.sleep(500);
                         response = httpclient.execute(login);
-                        logger.info("login status:{}", response.getStatusLine().getStatusCode());
-
+                        int statusCode = response.getStatusLine().getStatusCode();
+                        logger.info("login status:{}",statusCode);
+                        if(statusCode!=200){
+                            continue;
+                        }
                         HttpEntity entity = response.getEntity();
                         String entityStr = EntityUtils.toString(entity);
                         logger.info("登录返回结果：{}",entityStr);
@@ -946,8 +954,12 @@ public class ClientTicket /*implements ApplicationRunner*/{
                                 notlogedIn = false;
                                 break;
                             } else {
-                                logger.info("登陆失败");
-//                                     return false;
+                                String msg = String.valueOf(rsmap.get("result_code"));
+                                logger.info("登陆失败:{}",msg);
+                                if(msg.contains("密码")){
+                                    System.exit(0);
+                                }
+                                break;
                             }
                         } else {
                             logger.error("登陆失败，发生了302，被禁了？");
@@ -1639,7 +1651,7 @@ public class ClientTicket /*implements ApplicationRunner*/{
     }
 
     public void setPassengerStrMap(Map<String,String> strMap){
-        this.passengerStrMap = new HashMap<String, String> (passengerStrMap);
+        this.passengerStrMap = new HashMap<String, String> (strMap);
     }
 
 }
